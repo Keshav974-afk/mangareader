@@ -1,0 +1,107 @@
+import React, { useState } from 'react';
+import { Star, BookOpen, BookText } from 'lucide-react';
+import { MangaItem } from '../types/atsu';
+import { api } from '../services/api';
+
+interface MangaCardProps {
+  item: MangaItem;
+  onNavigate: (route: string) => void;
+  width?: string;
+}
+
+export const MangaCard: React.FC<MangaCardProps> = ({ item, onNavigate, width = 'w-36 sm:w-44 md:w-48' }) => {
+  const [imgError, setImgError] = useState(false);
+  const [fallbackTried, setFallbackTried] = useState(false);
+  const initialUrl = api.getPosterUrl(item, 'medium');
+  const [imgSrc, setImgSrc] = useState(initialUrl);
+
+  const isNovel = item.medium === 'Novel';
+  const rating = item.mbRating ? item.mbRating.toFixed(1) : null;
+  const title = item.title || item.englishTitle || 'Untitled';
+
+  const handleError = () => {
+    // If .avif or small/medium fails, fallback to main .jpg image
+    if (!fallbackTried && (item.image || (item as any).poster?.image)) {
+      setFallbackTried(true);
+      const fallbackUrl = api.getImageUrl(item.image || (item as any).poster?.image);
+      if (fallbackUrl !== imgSrc) {
+        setImgSrc(fallbackUrl);
+        return;
+      }
+    }
+    setImgError(true);
+  };
+
+  return (
+    <div
+      onClick={() => onNavigate(`#/manga/${item.id}`)}
+      className={`group relative ${width.includes('w-full') ? 'w-full' : 'shrink-0 ' + width} cursor-pointer select-none transition-all duration-300 hover:-translate-y-1 active:scale-95`}
+    >
+      {/* Poster wrapper with aspect ratio 2/3 */}
+      <div className="relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-carbon-800 border border-white/[0.08] group-hover:border-brand-500/50 shadow-md group-hover:shadow-xl group-hover:shadow-brand-500/10 transition-all">
+        {imgError || !imgSrc ? (
+          <div className="w-full h-full flex flex-col items-center justify-center p-3 text-center bg-carbon-850 text-gray-500">
+            {isNovel ? <BookText className="w-8 h-8 mb-2 opacity-50" /> : <BookOpen className="w-8 h-8 mb-2 opacity-50" />}
+            <span className="text-[11px] font-semibold line-clamp-2 text-gray-400">{title}</span>
+          </div>
+        ) : (
+          <img
+            src={imgSrc}
+            alt={title}
+            loading="lazy"
+            onError={handleError}
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+          />
+        )}
+
+        {/* Gradient shadow overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-carbon-950 via-carbon-950/20 to-transparent opacity-80 group-hover:opacity-60 transition-opacity" />
+
+        {/* Top Badges */}
+        <div className="absolute top-2 inset-x-2 flex items-center justify-between gap-1 pointer-events-none">
+          {/* Medium Pill */}
+          <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md backdrop-blur-md shadow-sm ${
+            isNovel 
+              ? 'bg-indigo-600/90 text-white border border-indigo-400/30' 
+              : 'bg-emerald-600/90 text-white border border-emerald-400/30'
+          }`}>
+            {isNovel ? 'Novel' : (item.type || 'Comic')}
+          </span>
+
+          {/* Rating */}
+          {rating ? (
+            <span className="flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-black/75 backdrop-blur-md text-amber-400 border border-white/10">
+              <Star className="w-3 h-3 fill-amber-400 stroke-amber-400" />
+              {rating}
+            </span>
+          ) : null}
+        </div>
+
+        {/* Bottom Info inside poster */}
+        <div className="absolute bottom-2 inset-x-2 pointer-events-none">
+          {item.chapterCount ? (
+            <span className="text-[10px] font-medium text-gray-300 bg-black/60 px-1.5 py-0.5 rounded backdrop-blur">
+              {item.chapterCount} Chapters
+            </span>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Title & Type below poster */}
+      <div className="pt-2 px-0.5">
+        <h3 className="font-bold text-xs sm:text-sm text-gray-100 group-hover:text-brand-400 transition-colors line-clamp-2 leading-snug">
+          {title}
+        </h3>
+        <p className="text-[11px] text-gray-400 mt-0.5 truncate flex items-center gap-1.5">
+          <span>{isNovel ? 'Light Novel' : (item.type || 'Manga')}</span>
+          {item.status ? (
+            <>
+              <span className="text-gray-600">•</span>
+              <span className="text-gray-400">{item.status}</span>
+            </>
+          ) : null}
+        </p>
+      </div>
+    </div>
+  );
+};

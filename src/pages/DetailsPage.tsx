@@ -1,0 +1,334 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Star,
+  Play,
+  Bookmark,
+  Share2,
+  Calendar,
+  Users,
+  Eye,
+  BookOpen,
+  BookText,
+  Search,
+  ArrowUpDown,
+  Loader2,
+  ChevronDown,
+  ChevronUp
+} from 'lucide-react';
+import { MangaPageInfo, Chapter } from '../types/atsu';
+import { api } from '../services/api';
+import { useReadingHistory } from '../hooks/useReadingHistory';
+
+interface DetailsPageProps {
+  mangaId: string;
+  onNavigate: (route: string) => void;
+}
+
+export const DetailsPage: React.FC<DetailsPageProps> = ({ mangaId, onNavigate }) => {
+  const [info, setInfo] = useState<MangaPageInfo | null>(null);
+  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [chapterSearch, setChapterSearch] = useState('');
+  const [sortAsc, setSortAsc] = useState(false);
+  const [synopsisExpanded, setSynopsisExpanded] = useState(false);
+
+  const { isBookmarked, toggleBookmark, getProgress } = useReadingHistory();
+
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoading(true);
+
+    Promise.all([
+      api.getMangaInfo(mangaId),
+      api.getAllChapters(mangaId).catch(() => [])
+    ])
+      .then(([mangaInfo, chs]) => {
+        if (!isMounted) return;
+        setInfo(mangaInfo);
+        setChapters(chs || []);
+        setIsLoading(false);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      })
+      .catch(err => {
+        console.error('Failed to load manga details:', err);
+        setIsLoading(false);
+      });
+
+    return () => { isMounted = false; };
+  }, [mangaId]);
+
+  if (isLoading) {
+    return (
+      <div className="py-24 flex flex-col items-center justify-center text-white">
+        <Loader2 className="w-10 h-10 text-brand-400 animate-spin mb-4" />
+        <p className="text-sm font-semibold text-gray-300">Loading series details...</p>
+      </div>
+    );
+  }
+
+  if (!info) {
+    return (
+      <div className="py-20 text-center text-white">
+        <h2 className="text-xl font-bold mb-2">Series Not Found</h2>
+        <p className="text-sm text-gray-400 mb-6">Could not retrieve metadata from Atsu API.</p>
+        <button
+          onClick={() => onNavigate('#/')}
+          className="px-6 py-2.5 rounded-xl bg-brand-500 font-bold text-sm"
+        >
+          Return Home
+        </button>
+      </div>
+    );
+  }
+
+  const isNovel = info.medium === 'Novel';
+  const posterUrl = api.getPosterUrl(info, 'large');
+  const bannerUrl = api.getBannerUrl(info.banner);
+  const bookmarked = isBookmarked(info.id);
+  const rating = info.avgRating ? info.avgRating.toFixed(1) : null;
+  const progress = getProgress(info.id);
+
+  // Filter chapters
+  const filteredChapters = chapters
+    .filter(ch => {
+      if (!chapterSearch.trim()) return true;
+      const q = chapterSearch.toLowerCase();
+      return (
+        String(ch.number).includes(q) ||
+        (ch.title && ch.title.toLowerCase().includes(q))
+      );
+    })
+    .sort((a, b) => {
+      const diff = Number(a.number) - Number(b.number);
+      return sortAsc ? diff : -diff;
+    });
+
+  const firstChapter = [...chapters].sort((a, b) => Number(a.number) - Number(b.number))[0];
+  const resumeChapter = progress
+    ? chapters.find(c => String(c.id) === String(progress.chapterId)) || firstChapter
+    : firstChapter;
+
+  return (
+    <div className="pb-20 space-y-8 fade-enter">
+      
+      {/* Banner & Header Card */}
+      <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden bg-carbon-900 border border-white/10 shadow-2xl">
+        
+        {/* Banner Backdrop */}
+        <div className="relative h-48 sm:h-72 md:h-80 w-full overflow-hidden bg-carbon-850">
+          {bannerUrl || posterUrl ? (
+            <img
+              src={bannerUrl || posterUrl}
+              alt={info.title}
+              className="w-full h-full object-cover filter brightness-[0.45] scale-105"
+            />
+          ) : null}
+          <div className="absolute inset-0 bg-gradient-to-t from-carbon-900 via-carbon-900/40 to-transparent" />
+        </div>
+
+        {/* Content Row */}
+        <div className="relative z-10 px-4 sm:px-8 pb-8 -mt-20 sm:-mt-28 flex flex-col md:flex-row gap-6 sm:gap-8 items-start">
+          
+          {/* Poster Card */}
+          <div className="w-36 sm:w-48 md:w-56 aspect-[2/3] rounded-2xl overflow-hidden bg-carbon-800 border-2 border-white/15 shadow-2xl shrink-0 mx-auto md:mx-0">
+            <img
+              src={posterUrl}
+              alt={info.title}
+              className="w-full h-full object-cover"
+            />
+          </div>
+
+          {/* Details Column */}
+          <div className="flex-1 min-w-0 space-y-4">
+            
+            {/* Badges */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`text-xs font-black uppercase px-2.5 py-1 rounded-md shadow-sm ${
+                isNovel ? 'bg-indigo-600 text-white' : 'bg-brand-500 text-white'
+              }`}>
+                {isNovel ? 'Light Novel' : (info.type || 'Manga')}
+              </span>
+
+              {rating && (
+                <span className="flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-md bg-black/60 text-amber-400 border border-white/10">
+                  <Star className="w-3.5 h-3.5 fill-amber-400" />
+                  {rating} Rating
+                </span>
+              )}
+
+              {info.status && (
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-white/10 text-gray-300">
+                  {info.status}
+                </span>
+              )}
+
+              {info.totalChapterCount ? (
+                <span className="text-xs font-semibold text-gray-400">
+                  {info.totalChapterCount} Chapters
+                </span>
+              ) : null}
+            </div>
+
+            {/* Title */}
+            <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight leading-tight">
+              {info.title}
+            </h1>
+
+            {info.englishTitle && info.englishTitle !== info.title && (
+              <p className="text-sm text-gray-400 font-medium">
+                {info.englishTitle}
+              </p>
+            )}
+
+            {/* Authors & Artists */}
+            {info.authors && info.authors.length > 0 && (
+              <div className="flex items-center gap-2 text-xs text-gray-300">
+                <Users className="w-4 h-4 text-brand-400 shrink-0" />
+                <span className="text-gray-400">Authors:</span>
+                <span className="font-semibold text-white">
+                  {info.authors.map(a => a.name).join(', ')}
+                </span>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 pt-2 w-full">
+              {resumeChapter && (
+                <button
+                  onClick={() => onNavigate(`#/read/${info.id}/${resumeChapter.id}`)}
+                  className="w-full sm:w-auto px-6 py-3.5 sm:py-3 rounded-xl bg-brand-500 hover:bg-brand-400 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-brand-500/25 active:scale-95 transition-all"
+                >
+                  {isNovel ? <BookText className="w-4 h-4" /> : <Play className="w-4 h-4 fill-white" />}
+                  <span>{progress ? `Resume Ch. ${progress.chapterNumber}` : 'Start Reading'}</span>
+                </button>
+              )}
+
+              <button
+                onClick={() => toggleBookmark(info)}
+                className={`w-full sm:w-auto px-5 py-3.5 sm:py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 border transition-all active:scale-95 ${
+                  bookmarked
+                    ? 'bg-brand-500/20 text-brand-400 border-brand-500/40'
+                    : 'bg-white/10 hover:bg-white/20 text-white border-white/15'
+                }`}
+              >
+                <Bookmark className={`w-4 h-4 ${bookmarked ? 'fill-brand-400' : ''}`} />
+                <span>{bookmarked ? 'In Library' : 'Add to Library'}</span>
+              </button>
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* Genres & Synopsis */}
+        <div className="px-4 sm:px-8 pb-8 pt-2 space-y-4 border-t border-white/10">
+          {/* Genre Chips */}
+          {info.genres && info.genres.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 pt-4">
+              {info.genres.map(g => (
+                <span
+                  key={g.id || g.name}
+                  className="px-3 py-1 rounded-lg text-xs font-semibold bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition"
+                >
+                  {g.name}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Synopsis */}
+          {info.synopsis && (
+            <div className="relative">
+              <p className={`text-sm text-gray-300 leading-relaxed ${!synopsisExpanded ? 'line-clamp-3 sm:line-clamp-4' : ''}`}>
+                {info.synopsis}
+              </p>
+              {info.synopsis.length > 200 && (
+                <button
+                  onClick={() => setSynopsisExpanded(!synopsisExpanded)}
+                  className="mt-2 text-xs font-bold text-brand-400 hover:text-brand-300 flex items-center gap-1"
+                >
+                  <span>{synopsisExpanded ? 'Show Less' : 'Read Full Synopsis'}</span>
+                  {synopsisExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+      </div>
+
+      {/* Chapters Section */}
+      <section className="bg-carbon-900 border border-white/10 rounded-2xl sm:rounded-3xl p-4 sm:p-8 shadow-xl space-y-6">
+        
+        {/* Chapters Header & Search */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
+          <div>
+            <h2 className="font-extrabold text-xl text-white">
+              Chapters ({chapters.length})
+            </h2>
+            <p className="text-xs text-gray-400">Select a chapter to begin reading</p>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            {/* Search Input */}
+            <div className="relative flex-1 sm:w-64">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search chapter..."
+                value={chapterSearch}
+                onChange={e => setChapterSearch(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-gray-500 outline-none focus:border-brand-500"
+              />
+            </div>
+
+            {/* Sort Toggle */}
+            <button
+              onClick={() => setSortAsc(!sortAsc)}
+              className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 shrink-0"
+              title={sortAsc ? 'Sorting Ascending' : 'Sorting Descending'}
+            >
+              <ArrowUpDown className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Chapters Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-[600px] overflow-y-auto no-scrollbar pr-1">
+          {filteredChapters.length > 0 ? (
+            filteredChapters.map(ch => {
+              const isCurrent = progress && String(progress.chapterId) === String(ch.id);
+              return (
+                <button
+                  key={ch.id}
+                  onClick={() => onNavigate(`#/read/${info.id}/${ch.id}`)}
+                  className={`p-3.5 rounded-xl text-left border transition-all flex items-center justify-between gap-3 group ${
+                    isCurrent
+                      ? 'bg-brand-500/20 text-brand-400 font-bold border-brand-500/40'
+                      : 'bg-white/[0.03] hover:bg-white/[0.08] text-gray-300 border-white/[0.06] hover:border-brand-500/30'
+                  }`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm font-semibold truncate group-hover:text-white transition-colors">
+                      {ch.title || `Chapter ${ch.number}`}
+                    </p>
+                    <p className="text-[11px] text-gray-500 mt-0.5">
+                      Chapter {ch.number} {ch.pageCount ? `• ${ch.pageCount} pages` : ''}
+                    </p>
+                  </div>
+                  <Play className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 text-brand-400 shrink-0 transition-opacity" />
+                </button>
+              );
+            })
+          ) : (
+            <div className="col-span-full py-12 text-center text-gray-500 text-sm">
+              No chapters match "{chapterSearch}"
+            </div>
+          )}
+        </div>
+
+      </section>
+
+    </div>
+  );
+};
