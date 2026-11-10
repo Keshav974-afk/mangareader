@@ -12,12 +12,16 @@ import {
 
 const CDN_BASE = 'https://cdn.atsu.moe';
 
+const API_PROXY_URL = (import.meta as any).env?.VITE_API_PROXY_URL || '';
+const API_BASE = API_PROXY_URL ? `${API_PROXY_URL}/api` : '/api';
+const CDN_PREFIX = API_PROXY_URL ? `${API_PROXY_URL}/cdn` : '/cdn';
+
 class AtsuApiService {
   private cache = new Map<string, { time: number; data: any }>();
   private cacheTtl = 2 * 60 * 1000; // 2 minutes
 
   private async fetchJson<T>(endpoint: string, cacheDuration = 0): Promise<T> {
-    const fullUrl = `/api${endpoint}`;
+    const fullUrl = `${API_BASE}${endpoint}`;
 
     if (cacheDuration > 0 && this.cache.has(fullUrl)) {
       const entry = this.cache.get(fullUrl)!;
@@ -154,13 +158,13 @@ class AtsuApiService {
     
     // If it's a full URL to cdn.atsu.moe, rewrite to /cdn proxy
     if (imagePath.includes('cdn.atsu.moe/static/')) {
-      return imagePath.replace(/^https?:\/\/cdn\.atsu\.moe\/static/, '/cdn/static');
+      return imagePath.replace(/^https?:\/\/cdn\.atsu\.moe\/static/, `${CDN_PREFIX}/static`);
     }
     if (imagePath.includes('cdn.atsu.moe/')) {
-      return imagePath.replace(/^https?:\/\/cdn\.atsu\.moe/, '/cdn/static');
+      return imagePath.replace(/^https?:\/\/cdn\.atsu\.moe/, `${CDN_PREFIX}/static`);
     }
     if (imagePath.includes('atsu.moe/static/')) {
-      return imagePath.replace(/^https?:\/\/atsu\.moe\/static/, '/cdn/static');
+      return imagePath.replace(/^https?:\/\/atsu\.moe\/static/, `${CDN_PREFIX}/static`);
     }
 
     // Other external URLs (e.g. gravatar, discord, google)
@@ -170,9 +174,9 @@ class AtsuApiService {
 
     const clean = imagePath.startsWith('/') ? imagePath : '/' + imagePath;
     if (clean.startsWith('/static/')) {
-      return `/cdn${clean}`;
+      return `${CDN_PREFIX}${clean}`;
     }
-    return `/cdn/static${clean}`;
+    return `${CDN_PREFIX}/static${clean}`;
   }
 
   getPosterUrl(item?: any, preferredSize: 'small' | 'medium' | 'large' = 'medium'): string {
