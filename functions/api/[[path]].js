@@ -1,33 +1,52 @@
 // Cloudflare Pages Function: Proxy for Atsu.moe API
 export async function onRequest(context) {
-  const { request, params } = context;
+  const { request } = context;
   const url = new URL(request.url);
 
-  // Reconstruct path to https://atsu.moe/api/...
-  const targetUrl = new URL(`https://atsu.moe${url.pathname}${url.search}`);
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': '*',
+  };
 
   // Handle CORS preflight
   if (request.method === 'OPTIONS') {
     return new Response(null, {
       status: 204,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': '*',
-        'Access-Control-Max-Age': '86400',
-      },
+      headers: corsHeaders,
     });
   }
 
-  const modifiedHeaders = new Headers(request.headers);
-  modifiedHeaders.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-  modifiedHeaders.set('Referer', 'https://atsu.moe');
-  modifiedHeaders.set('Accept', 'application/json');
+  // Healthcheck endpoint
+  if (url.pathname === '/api/health' || url.pathname === '/api/health/') {
+    return new Response(JSON.stringify({ status: 'ok', service: 'voidflix-manga-proxy' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+    });
+  }
+
+  // Target URL on atsu.moe
+  const targetUrl = new URL(`https://atsu.moe${url.pathname}${url.search}`);
+
+  // Clean, realistic browser headers - DO NOT forward request.headers as it contains
+  // host: mangareader-e3n.pages.dev and cf-* headers which trigger Cloudflare WAF block
+  const headers = new Headers();
+  headers.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36');
+  headers.set('Accept', 'application/json, text/plain, */*');
+  headers.set('Accept-Language', 'en-US,en;q=0.9');
+  headers.set('Referer', 'https://atsu.moe/');
+  headers.set('Origin', 'https://atsu.moe');
+  headers.set('Sec-Ch-Ua', '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"');
+  headers.set('Sec-Ch-Ua-Mobile', '?0');
+  headers.set('Sec-Ch-Ua-Platform', '"Windows"');
+  headers.set('Sec-Fetch-Dest', 'empty');
+  headers.set('Sec-Fetch-Mode', 'cors');
+  headers.set('Sec-Fetch-Site', 'same-origin');
 
   try {
     const res = await fetch(targetUrl.toString(), {
       method: request.method,
-      headers: modifiedHeaders,
+      headers,
       body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : undefined,
     });
 
@@ -51,7 +70,7 @@ export async function onRequest(context) {
       status: 502,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        ...corsHeaders,
       },
     });
   }
