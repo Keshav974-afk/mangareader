@@ -45,6 +45,10 @@ export const MangaReader: React.FC<MangaReaderProps> = ({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  // Touch swipe coordinates for Side Reader
+  const touchStartXRef = useRef<number>(0);
+  const touchStartYRef = useRef<number>(0);
+
   const controlsTimeoutRef = useRef<any>(null);
   const { saveProgress, getProgress } = useReadingHistory();
 
@@ -117,6 +121,58 @@ export const MangaReader: React.FC<MangaReaderProps> = ({
     }
   }, [currentPage, pages.length, chapterId]);
 
+  // Real-time Scroll Spy for Webtoon Mode: updates currentPage & slidebar as user scrolls
+  useEffect(() => {
+    if (mode !== 'webtoon' || pages.length === 0) return;
+
+    let ticking = false;
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const viewportMid = window.innerHeight * 0.45;
+          let activeIdx = 0;
+          let minDistance = Infinity;
+
+          for (let i = 0; i < pages.length; i++) {
+            const el = document.getElementById(`manga-page-${i}`);
+            if (el) {
+              const rect = el.getBoundingClientRect();
+              if (rect.top <= viewportMid && rect.bottom >= viewportMid) {
+                activeIdx = i;
+                break;
+              }
+              const dist = Math.abs(rect.top - viewportMid);
+              if (dist < minDistance) {
+                minDistance = dist;
+                activeIdx = i;
+              }
+            }
+          }
+
+          setCurrentPage(prev => (prev !== activeIdx ? activeIdx : prev));
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [mode, pages.length]);
+
+  // Preload adjacent pages in memory for instantaneous flipping in Side Reader
+  useEffect(() => {
+    if (pages.length === 0) return;
+    for (let i = 1; i <= 2; i++) {
+      const nextIdx = currentPage + i;
+      if (nextIdx < pages.length && pages[nextIdx]?.image) {
+        const img = new Image();
+        img.src = api.getImageUrl(pages[nextIdx].image);
+      }
+    }
+  }, [currentPage, pages]);
+
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -151,6 +207,8 @@ export const MangaReader: React.FC<MangaReaderProps> = ({
     if (mode === 'webtoon') {
       const el = document.getElementById(`manga-page-${clamped}`);
       el?.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'instant' });
     }
   };
 
@@ -173,11 +231,40 @@ export const MangaReader: React.FC<MangaReaderProps> = ({
   const setReadingMode = (m: 'webtoon' | 'single') => {
     setMode(m);
     localStorage.setItem('atsu_manga_mode', m);
+    setTimeout(() => {
+      if (m === 'webtoon') {
+        const el = document.getElementById(`manga-page-${currentPage}`);
+        el?.scrollIntoView({ behavior: 'instant' as any });
+      } else {
+        window.scrollTo({ top: 0, behavior: 'instant' });
+      }
+    }, 20);
   };
 
   const setFitMode = (f: 'width' | 'height' | 'original') => {
     setFit(f);
     localStorage.setItem('atsu_manga_fit', f);
+  };
+
+  // Touch Swipe Handlers for Side Reader
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (mode !== 'single') return;
+    touchStartXRef.current = e.touches[0].clientX;
+    touchStartYRef.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (mode !== 'single') return;
+    const deltaX = e.changedTouches[0].clientX - touchStartXRef.current;
+    const deltaY = e.changedTouches[0].clientY - touchStartYRef.current;
+
+    if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+      if (deltaX < 0) {
+        nextPage();
+      } else {
+        prevPage();
+      }
+    }
   };
 
   if (isLoading) {
@@ -315,38 +402,74 @@ export const MangaReader: React.FC<MangaReaderProps> = ({
             ))}
           </div>
         ) : (
-          <div className="relative flex items-center justify-center max-w-5xl mx-auto w-full min-h-[75vh]">
-            {/* Click Left for Prev */}
+          <div
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            className="relative flex items-center justify-center max-w-5xl mx-auto w-full min-h-[85vh] px-2 sm:px-14 py-4 select-none touch-pan-y"
+          >
+            {/* Floating Prev Button */}
+            <button
+              onClick={e => { e.stopPropagation(); prevPage(); }}
+              disabled={currentPage === 0 && !prevChapter}
+              className={`hidden sm:flex absolute left-2 md:left-4 z-30 w-11 h-11 rounded-full bg-black/80 hover:bg-black text-white items-center justify-center border border-white/20 transition-all hover:scale-110 active:scale-95 ${
+                currentPage === 0 && !prevChapter ? 'opacity-20 cursor-not-allowed' : 'opacity-80 hover:opacity-100'
+              }`}
+              title="Previous Page (Left Arrow or Swipe Right)"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+
+            {/* Click Left 25% for Prev */}
             <div
               onClick={e => { e.stopPropagation(); prevPage(); }}
-              className="absolute left-0 inset-y-0 w-1/3 z-20 cursor-w-resize"
+              className="absolute left-0 inset-y-0 w-1/4 z-20 cursor-w-resize"
               title="Previous Page"
             />
-            
-            <img
-              src={api.getImageUrl(pages[currentPage]?.image)}
-              alt={`Page ${currentPage + 1}`}
-              onError={(e) => {
-                const target = e.currentTarget;
-                if (!target.dataset.retried) {
-                  target.dataset.retried = '1';
-                  setTimeout(() => {
-                    const base = api.getImageUrl(pages[currentPage]?.image);
-                    target.src = base + (base.includes('?') ? '&' : '?') + 'retry=' + Date.now();
-                  }, 1500);
-                }
-              }}
-              className={`select-none shadow-2xl rounded-sm ${
-                fit === 'height' ? 'max-h-[92vh] w-auto object-contain' : 'w-full max-w-4xl'
-              }`}
-            />
 
-            {/* Click Right for Next */}
+            {/* Center Active Manga Page Image */}
+            <div className="relative max-w-full flex flex-col items-center justify-center">
+              <img
+                key={`single-page-${currentPage}`}
+                src={api.getImageUrl(pages[currentPage]?.image)}
+                alt={`Page ${currentPage + 1}`}
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  if (!target.dataset.retried) {
+                    target.dataset.retried = '1';
+                    setTimeout(() => {
+                      const base = api.getImageUrl(pages[currentPage]?.image);
+                      target.src = base + (base.includes('?') ? '&' : '?') + 'retry=' + Date.now();
+                    }, 1500);
+                  }
+                }}
+                className={`select-none rounded-sm transition-all duration-150 ${
+                  fit === 'height' ? 'max-h-[90vh] w-auto object-contain' : 'w-full max-w-3xl sm:max-w-4xl'
+                }`}
+              />
+
+              {/* Bottom Subtle Page Indicator in Side Reader */}
+              <div className="mt-2 text-center pointer-events-none">
+                <span className="text-[11px] font-semibold text-gray-400 bg-black/60 border border-white/10 px-2.5 py-1 rounded-full backdrop-blur">
+                  Page {currentPage + 1} of {pages.length} • Swipe or tap edges
+                </span>
+              </div>
+            </div>
+
+            {/* Click Right 25% for Next */}
             <div
               onClick={e => { e.stopPropagation(); nextPage(); }}
-              className="absolute right-0 inset-y-0 w-1/3 z-20 cursor-e-resize"
+              className="absolute right-0 inset-y-0 w-1/4 z-20 cursor-e-resize"
               title="Next Page"
             />
+
+            {/* Floating Next Button */}
+            <button
+              onClick={e => { e.stopPropagation(); nextPage(); }}
+              className="hidden sm:flex absolute right-2 md:right-4 z-30 w-11 h-11 rounded-full bg-black/80 hover:bg-black text-white items-center justify-center border border-white/20 transition-all hover:scale-110 active:scale-95 opacity-80 hover:opacity-100"
+              title="Next Page (Right Arrow or Swipe Left)"
+            >
+              <ChevronRight className="w-6 h-6" />
+            </button>
           </div>
         )}
       </main>
