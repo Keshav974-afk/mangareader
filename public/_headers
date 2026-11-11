@@ -2,14 +2,21 @@
   X-Content-Type-Options: nosniff
   X-Frame-Options: SAMEORIGIN
   Referrer-Policy: same-origin
+  Cache-Control: public, max-age=86400, s-maxage=86400
 
 /manifest.json
   Content-Type: application/manifest+json; charset=utf-8
-  Cache-Control: public, max-age=86400
+  Cache-Control: public, max-age=86400, s-maxage=86400
 
 /sw.js
   Content-Type: application/javascript; charset=utf-8
   Cache-Control: no-cache, no-store, must-revalidate
 
 /assets/*
-  Cache-Control: public, max-age=31536000, immutable
+  Cache-Control: public, max-age=86400, s-maxage=86400, immutable
+
+/api/*
+  Cache-Control: public, max-age=86400, s-maxage=86400, stale-while-revalidate=86400
+
+/cdn/*
+  Cache-Control: public, max-age=86400, s-maxage=86400, stale-while-revalidate=86400

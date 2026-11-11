@@ -16,17 +16,70 @@ const API_PROXY_URL = (import.meta as any).env?.VITE_API_PROXY_URL || '';
 const API_BASE = API_PROXY_URL ? `${API_PROXY_URL}/api` : '/api';
 const CDN_PREFIX = API_PROXY_URL ? `${API_PROXY_URL}/cdn` : '/cdn';
 
-class AtsuApiService {
-  private cache = new Map<string, { time: number; data: any }>();
-  private cacheTtl = 2 * 60 * 1000; // 2 minutes
+// 1 Day Cache TTL (86,400,000 ms = 24 Hours)
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
-  private async fetchJson<T>(endpoint: string, cacheDuration = 0): Promise<T> {
+class AtsuApiService {
+  private memoryCache = new Map<string, { time: number; data: any }>();
+  private cacheTtl = ONE_DAY_MS;
+
+  private getCachedData<T>(key: string, maxAgeMs: number): T | null {
+    // 1. Check in-memory RAM cache first
+    const mem = this.memoryCache.get(key);
+    if (mem && Date.now() - mem.time < maxAgeMs) {
+      return mem.data as T;
+    }
+
+    // 2. Check localStorage for persistence across reloads / offline
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(`atsu_cache_${key}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed && parsed.time && Date.now() - parsed.time < maxAgeMs) {
+            // Restore into memory cache for sub-millisecond future reads
+            this.memoryCache.set(key, parsed);
+            return parsed.data as T;
+          } else {
+            localStorage.removeItem(`atsu_cache_${key}`);
+          }
+        }
+      } catch {
+        // LocalStorage parse error or quota
+      }
+    }
+
+    return null;
+  }
+
+  private setCachedData(key: string, data: any): void {
+    const entry = { time: Date.now(), data };
+    this.memoryCache.set(key, entry);
+
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem(`atsu_cache_${key}`, JSON.stringify(entry));
+      } catch (e) {
+        // Quota exceeded: clean up old cached entries
+        try {
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('atsu_cache_')) {
+              localStorage.removeItem(k);
+            }
+          }
+        } catch {}
+      }
+    }
+  }
+
+  private async fetchJson<T>(endpoint: string, cacheDuration = ONE_DAY_MS): Promise<T> {
     const fullUrl = `${API_BASE}${endpoint}`;
 
-    if (cacheDuration > 0 && this.cache.has(fullUrl)) {
-      const entry = this.cache.get(fullUrl)!;
-      if (Date.now() - entry.time < cacheDuration) {
-        return entry.data as T;
+    if (cacheDuration > 0) {
+      const cached = this.getCachedData<T>(fullUrl, cacheDuration);
+      if (cached !== null) {
+        return cached;
       }
     }
 
@@ -44,16 +97,22 @@ class AtsuApiService {
 
       const data = await res.json();
       if (cacheDuration > 0) {
-        this.cache.set(fullUrl, { time: Date.now(), data });
+        this.setCachedData(fullUrl, data);
       }
       return data as T;
     } catch (err: any) {
+      // If network fails, try stale cache before failing
+      const stale = this.getCachedData<T>(fullUrl, Infinity);
+      if (stale !== null) {
+        console.warn(`[API] Network failed for ${endpoint}, using stale 1-day cache`);
+        return stale;
+      }
       console.error(`Request to ${endpoint} failed:`, err);
       throw err;
     }
   }
 
-  // ---- Home / Popular / Updates ----
+  // ---- Home / Popular / Updates (Cached 1 Day) ----
   async getPopular(params?: { timeframe?: 'daily' | 'weekly' | 'monthly' | 'all'; offset?: number; limit?: number; mediums?: string }): Promise<{ items: MangaItem[] }> {
     const tf = params?.timeframe || 'daily';
     const offset = params?.offset ?? 0;
@@ -61,7 +120,7 @@ class AtsuApiService {
     const mediums = params?.mediums ?? 'Comic,Novel';
     return this.fetchJson<{ items: MangaItem[] }>(
       `/home2/popular?timeframe=${tf}&offset=${offset}&limit=${limit}&mediums=${encodeURIComponent(mediums)}`,
-      60000
+      ONE_DAY_MS
     );
   }
 
@@ -71,7 +130,7 @@ class AtsuApiService {
     const mediums = params?.mediums ?? 'Comic,Novel';
     return this.fetchJson<{ items: MangaItem[] }>(
       `/home2/hotUpdates?offset=${offset}&limit=${limit}&types=Manga,Manwha,Manhua,OEL,Other&mediums=${encodeURIComponent(mediums)}&contentRatings=Safe,Suggestive,Erotica`,
-      60000
+      ONE_DAY_MS
     );
   }
 
@@ -81,25 +140,25 @@ class AtsuApiService {
     const mediumsQuery = params?.mediums ? `&mediums=${encodeURIComponent(params.mediums)}` : '';
     return this.fetchJson<{ items: MangaItem[] }>(
       `/home2/recentlyUpdated?offset=${offset}&limit=${limit}${mediumsQuery}`,
-      60000
+      ONE_DAY_MS
     );
   }
 
   async getPopularNovels(limit = 24): Promise<{ items: MangaItem[] }> {
     return this.fetchJson<{ items: MangaItem[] }>(
       `/home2/popular?timeframe=daily&offset=0&limit=${limit}&mediums=Novel`,
-      60000
+      ONE_DAY_MS
     );
   }
 
   async getPopularComics(limit = 24): Promise<{ items: MangaItem[] }> {
     return this.fetchJson<{ items: MangaItem[] }>(
       `/home2/popular?timeframe=daily&offset=0&limit=${limit}&mediums=Comic`,
-      60000
+      ONE_DAY_MS
     );
   }
 
-  // ---- Search ----
+  // ---- Search (Cached 1 Day) ----
   async search(params: { query: string; page?: number; perPage?: number; medium?: 'all' | MediumType }): Promise<SearchResponse> {
     const { query, page = 1, perPage = 24, medium = 'all' } = params;
     if (!query || !query.trim()) return { hits: [], items: [] };
@@ -108,7 +167,7 @@ class AtsuApiService {
     if (medium === 'Novel') ep += `&filter_by=medium:=[Novel]`;
     else if (medium === 'Comic') ep += `&filter_by=medium:=[Comic]`;
 
-    const res = await this.fetchJson<{ hits: Array<{ document: MangaItem }> }>(ep, 30000);
+    const res = await this.fetchJson<{ hits: Array<{ document: MangaItem }> }>(ep, ONE_DAY_MS);
     const hits = res.hits || [];
     return {
       hits,
@@ -116,38 +175,38 @@ class AtsuApiService {
     };
   }
 
-  // ---- Manga / Novel Page ----
+  // ---- Manga / Novel Page (Cached 1 Day) ----
   async getMangaInfo(mangaId: string): Promise<MangaPageInfo> {
     const res = await this.fetchJson<{ mangaPage: MangaPageInfo }>(
       `/manga/page?id=${encodeURIComponent(mangaId)}`,
-      600000
+      ONE_DAY_MS
     );
     return res.mangaPage || (res as any);
   }
 
-  // ---- Chapters ----
+  // ---- Chapters (Cached 1 Day) ----
   async getAllChapters(mangaId: string): Promise<Chapter[]> {
     const res = await this.fetchJson<{ chapters: Chapter[] }>(
       `/manga/allChapters?mangaId=${encodeURIComponent(mangaId)}`,
-      600000
+      ONE_DAY_MS
     );
     return res.chapters || [];
   }
 
-  // ---- Chapter Pages (Manga / Comic) ----
+  // ---- Chapter Pages (Manga / Comic) (Cached 1 Day / Immutable) ----
   async getChapterPages(mangaId: string, chapterId: string): Promise<ReadChapterData> {
     const res = await this.fetchJson<{ readChapter: ReadChapterData }>(
       `/read/chapter?mangaId=${encodeURIComponent(mangaId)}&chapterId=${encodeURIComponent(chapterId)}`,
-      600000
+      ONE_DAY_MS
     );
     return res.readChapter;
   }
 
-  // ---- Novel Chapter (Text Paragraphs) ----
+  // ---- Novel Chapter (Text Paragraphs) (Cached 1 Day / Immutable) ----
   async getNovelChapter(mangaId: string, chapterId: string): Promise<ReadNovelChapterData> {
     const res = await this.fetchJson<{ readNovelChapter: ReadNovelChapterData }>(
       `/read/novelChapter?mangaId=${encodeURIComponent(mangaId)}&chapterId=${encodeURIComponent(chapterId)}`,
-      300000
+      ONE_DAY_MS
     );
     return res.readNovelChapter;
   }

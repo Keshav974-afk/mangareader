@@ -2,6 +2,10 @@
 const R2_PUBLIC_BASE = 'https://pub-2916bfced0d845f088ad2b3e71104031.r2.dev';
 const RAILWAY_PROXY_BASE = 'https://mangareader-production-b77c3f15.up.railway.app';
 
+// 1 Day Cache Duration (24 Hours)
+const ONE_DAY_SECONDS = 86400;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
 // Fast zero-dependency deterministic hash for query strings
 function getQueryHash(search) {
   if (!search) return 'default';
@@ -13,15 +17,16 @@ function getQueryHash(search) {
   return Math.abs(hash).toString(36);
 }
 
-// Smart Tiered Cache Policies:
-// 1. FOREVER: Published chapter content (Chapter 321 pages/text NEVER change once released)
-// 2. TEMPORARY: 
-//    - Series metadata: 1 hour TTL
-//    - Chapter lists: 2 hours TTL (so newly released chapters appear automatically)
-//    - Homepage trending/popular: 30 mins TTL
-//    - Homepage hot updates: 15 mins TTL
-//    - Homepage recently updated: 10 mins TTL
-//    - Search results: 30 mins TTL
+// 1-Day Cache Policies:
+// 1. FOREVER: Published chapter content (Chapter pages/text NEVER change once released)
+// 2. 1-DAY (86400s / 24h):
+//    - Series metadata: 1 day TTL
+//    - Chapter lists: 1 day TTL
+//    - Homepage trending/popular: 1 day TTL
+//    - Homepage hot updates: 1 day TTL
+//    - Homepage recently updated: 1 day TTL
+//    - Search results: 1 day TTL
+//    - All other API endpoints: 1 day TTL
 function getCachePolicy(pathname, search) {
   const queryStr = search ? (search.startsWith('?') ? search : `?${search}`) : '';
   const clean = pathname.replace(/^\/api\//, '').replace(/^\//, '');
@@ -45,22 +50,22 @@ function getCachePolicy(pathname, search) {
     }
   }
 
-  // B. TEMPORARY CACHE: Chapters list & Series metadata
+  // B. 1-DAY CACHE: Chapters list & Series metadata (24 Hours)
   if (clean === 'manga/allChapters') {
     const mangaId = new URLSearchParams(queryStr).get('mangaId');
     if (mangaId) {
-      return { type: 'TEMPORARY', key: `manga/allChapters/${mangaId}.json`, maxAge: 7200, ttlMs: 2 * 60 * 60 * 1000 };
+      return { type: '1-DAY', key: `manga/allChapters/${mangaId}.json`, maxAge: ONE_DAY_SECONDS, ttlMs: ONE_DAY_MS };
     }
   }
 
   if (clean === 'manga/page') {
     const id = new URLSearchParams(queryStr).get('id');
     if (id) {
-      return { type: 'TEMPORARY', key: `manga/page/${id}.json`, maxAge: 3600, ttlMs: 60 * 60 * 1000 };
+      return { type: '1-DAY', key: `manga/page/${id}.json`, maxAge: ONE_DAY_SECONDS, ttlMs: ONE_DAY_MS };
     }
   }
 
-  // C. TEMPORARY CACHE: Homepage Trending, Popular & Updates
+  // C. 1-DAY CACHE: Homepage Trending, Popular & Updates (24 Hours)
   if (clean === 'home2/popular') {
     const p = new URLSearchParams(queryStr);
     const tf = p.get('timeframe') || 'daily';
@@ -68,10 +73,10 @@ function getCachePolicy(pathname, search) {
     const lim = p.get('limit') || '24';
     const med = (p.get('mediums') || 'all').replace(/[^a-zA-Z0-9]/g, '_');
     return {
-      type: 'TEMPORARY',
+      type: '1-DAY',
       key: `home2/popular/${tf}_${off}_${lim}_${med}.json`,
-      maxAge: 1800,
-      ttlMs: 30 * 60 * 1000
+      maxAge: ONE_DAY_SECONDS,
+      ttlMs: ONE_DAY_MS
     };
   }
 
@@ -80,10 +85,10 @@ function getCachePolicy(pathname, search) {
     const off = p.get('offset') || '0';
     const lim = p.get('limit') || '24';
     return {
-      type: 'TEMPORARY',
+      type: '1-DAY',
       key: `home2/hotUpdates/${off}_${lim}.json`,
-      maxAge: 900,
-      ttlMs: 15 * 60 * 1000
+      maxAge: ONE_DAY_SECONDS,
+      ttlMs: ONE_DAY_MS
     };
   }
 
@@ -93,10 +98,10 @@ function getCachePolicy(pathname, search) {
     const lim = p.get('limit') || '24';
     const med = (p.get('mediums') || 'all').replace(/[^a-zA-Z0-9]/g, '_');
     return {
-      type: 'TEMPORARY',
+      type: '1-DAY',
       key: `home2/recentlyUpdated/${off}_${lim}_${med}.json`,
-      maxAge: 600,
-      ttlMs: 10 * 60 * 1000
+      maxAge: ONE_DAY_SECONDS,
+      ttlMs: ONE_DAY_MS
     };
   }
 
@@ -104,28 +109,28 @@ function getCachePolicy(pathname, search) {
     const sub = clean.replace(/^home2?\//, '').replace(/[^a-zA-Z0-9_-]/g, '_');
     const hash = getQueryHash(queryStr);
     return {
-      type: 'TEMPORARY',
+      type: '1-DAY',
       key: `home2/${sub}_${hash}.json`,
-      maxAge: 1200,
-      ttlMs: 20 * 60 * 1000
+      maxAge: ONE_DAY_SECONDS,
+      ttlMs: ONE_DAY_MS
     };
   }
 
-  // D. TEMPORARY CACHE: Search
+  // D. 1-DAY CACHE: Search (24 Hours)
   if (clean === 'search/manga' || clean.startsWith('search/')) {
     const p = new URLSearchParams(queryStr);
     const q = (p.get('q') || '').toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 32);
     const page = p.get('page') || '1';
     const med = (p.get('filter_by') || '').includes('Novel') ? 'novel' : ((p.get('filter_by') || '').includes('Comic') ? 'comic' : 'all');
     return {
-      type: 'TEMPORARY',
+      type: '1-DAY',
       key: `search/${q || 'empty'}_${med}_p${page}.json`,
-      maxAge: 1800,
-      ttlMs: 30 * 60 * 1000
+      maxAge: ONE_DAY_SECONDS,
+      ttlMs: ONE_DAY_MS
     };
   }
 
-  return { type: 'NO_R2', key: null, maxAge: 600, ttlMs: 10 * 60 * 1000 };
+  return { type: '1-DAY', key: null, maxAge: ONE_DAY_SECONDS, ttlMs: ONE_DAY_MS };
 }
 
 export async function onRequest(context) {
@@ -207,7 +212,7 @@ export async function onRequest(context) {
         context.env.R2_CACHE.put(policy.key, content, {
           httpMetadata: {
             contentType: 'application/json',
-            cacheControl: policy.type === 'FOREVER' ? 'public, max-age=31536000, immutable' : `public, max-age=${policy.maxAge}`
+            cacheControl: policy.type === 'FOREVER' ? 'public, max-age=31536000, immutable' : `public, max-age=${policy.maxAge}, s-maxage=${policy.maxAge}, stale-while-revalidate=86400`
           },
           customMetadata: {
             cachedAt: String(Date.now()),
@@ -254,7 +259,7 @@ export async function onRequest(context) {
           status: proxyRes.status,
           headers: {
             'Content-Type': 'application/json',
-            'Cache-Control': policy.type === 'FOREVER' ? 'public, max-age=31536000, immutable' : `public, max-age=${policy.maxAge}`,
+            'Cache-Control': policy.type === 'FOREVER' ? 'public, max-age=31536000, immutable' : `public, max-age=${policy.maxAge}, s-maxage=${policy.maxAge}, stale-while-revalidate=86400`,
             'X-Proxy-Provider': 'vaultproxies-residential',
             ...corsHeaders
           }
@@ -270,7 +275,7 @@ export async function onRequest(context) {
         status: res.status,
         headers: {
           'Content-Type': res.headers.get('content-type') || 'application/json',
-          'Cache-Control': policy.type === 'FOREVER' ? 'public, max-age=31536000, immutable' : `public, max-age=${policy.maxAge}`,
+          'Cache-Control': policy.type === 'FOREVER' ? 'public, max-age=31536000, immutable' : `public, max-age=${policy.maxAge}, s-maxage=${policy.maxAge}, stale-while-revalidate=86400`,
           'X-Cache': 'ORIGIN-FETCH',
           ...corsHeaders
         }
@@ -298,7 +303,7 @@ export async function onRequest(context) {
           status: proxyRes.status,
           headers: {
             'Content-Type': 'application/json',
-            'Cache-Control': policy.type === 'FOREVER' ? 'public, max-age=31536000, immutable' : `public, max-age=${policy.maxAge}`,
+            'Cache-Control': policy.type === 'FOREVER' ? 'public, max-age=31536000, immutable' : `public, max-age=${policy.maxAge}, s-maxage=${policy.maxAge}, stale-while-revalidate=86400`,
             'X-Proxy-Provider': 'vaultproxies-residential',
             ...corsHeaders
           }
