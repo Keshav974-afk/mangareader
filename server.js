@@ -61,9 +61,9 @@ function handleApiProxy(req, res, targetPath, parsedUrl) {
   }
 
   // Healthcheck
-  if (targetPath === '/api/health') {
+  if (targetPath === '/api/health' || targetPath === '/api/health/') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', proxy: 'atsu-reader-proxy' }));
+    res.end(JSON.stringify({ status: 'ok', proxy: 'voidflix-manga-proxy', time: new Date().toISOString() }));
     return;
   }
 
@@ -123,6 +123,15 @@ function handleApiProxy(req, res, targetPath, parsedUrl) {
 // Proxy CDN image requests to bypass Cloudflare anti-hotlinking
 function handleCdnProxy(req, res, targetPath, parsedUrl) {
   res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', '*');
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
   const query = parsedUrl.search || '';
   const fullUrl = `${ATSU_CDN_BASE}${targetPath}${query}`;
 
@@ -216,7 +225,7 @@ const server = http.createServer((req, res) => {
   serveStatic(res, filePath);
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`===============================================`);
   console.log(`  Voidflix Manga Server running on port ${PORT}`);
   console.log(`  http://localhost:${PORT}`);
