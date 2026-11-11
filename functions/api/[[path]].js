@@ -44,11 +44,32 @@ export async function onRequest(context) {
   headers.set('Sec-Fetch-Site', 'same-origin');
 
   try {
-    const res = await fetch(targetUrl.toString(), {
+    let res = await fetch(targetUrl.toString(), {
       method: request.method,
       headers,
       body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : undefined,
     });
+
+    // Fallback to Scrapfly if Cloudflare WAF blocks worker IP
+    if ((res.status === 403 || res.status === 401) && request.method === 'GET') {
+      const SCRAPFLY_KEY = context.env?.SCRAPFLY_KEY || 'scp-live-96e7f740c2b84816bbf8475dff519328';
+      const scrapflyUrl = `https://api.scrapfly.io/scrape?key=${SCRAPFLY_KEY}&url=${encodeURIComponent(targetUrl.toString())}&unblocker=true`;
+      const sfRes = await fetch(scrapflyUrl);
+      if (sfRes.ok) {
+        const sfData = await sfRes.json();
+        if (sfData.result && sfData.result.content) {
+          return new Response(sfData.result.content, {
+            status: sfData.result.status_code || 200,
+            headers: {
+              'Content-Type': sfData.result.content_type || 'application/json',
+              'Access-Control-Allow-Origin': '*',
+              'Cache-Control': 'public, max-age=600, s-maxage=600',
+              'X-Proxy-Provider': 'scrapfly'
+            }
+          });
+        }
+      }
+    }
 
     const responseHeaders = new Headers(res.headers);
     responseHeaders.set('Access-Control-Allow-Origin', '*');

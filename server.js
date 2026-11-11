@@ -26,9 +26,10 @@ const MIME_TYPES = {
   '.ico': 'image/x-icon'
 };
 
-// In-memory cache for home/popular queries (TTL 5 minutes)
+// In-memory cache for queries (TTL 10 minutes)
 const apiCache = new Map();
-const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_TTL_MS = 10 * 60 * 1000;
+const SCRAPFLY_KEY = process.env.SCRAPFLY_KEY || 'scp-live-96e7f740c2b84816bbf8475dff519328';
 
 function getCached(key) {
   const item = apiCache.get(key);
@@ -41,11 +42,31 @@ function getCached(key) {
 }
 
 function setCache(key, data) {
-  if (apiCache.size > 200) {
+  if (apiCache.size > 1000) {
     const firstKey = apiCache.keys().next().value;
     apiCache.delete(firstKey);
   }
   apiCache.set(key, { time: Date.now(), data });
+}
+
+function fetchViaScrapfly(targetUrl, cb) {
+  const scrapflyUrl = `https://api.scrapfly.io/scrape?key=${SCRAPFLY_KEY}&url=${encodeURIComponent(targetUrl)}&unblocker=true`;
+  https.get(scrapflyUrl, (sfRes) => {
+    let raw = '';
+    sfRes.on('data', c => raw += c);
+    sfRes.on('end', () => {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed.result && parsed.result.content) {
+          cb(null, parsed.result.status_code || 200, parsed.result.content, parsed.result.content_type || 'application/json');
+          return;
+        }
+        cb(new Error(parsed.message || 'Scrapfly empty response'));
+      } catch (e) {
+        cb(e);
+      }
+    });
+  }).on('error', err => cb(err));
 }
 
 // Proxy API requests to https://atsu.moe
@@ -71,11 +92,11 @@ function handleApiProxy(req, res, targetPath, parsedUrl) {
   const fullUrl = `${ATSU_API_BASE}${targetPath}${query}`;
   const cacheKey = req.method + ':' + fullUrl;
 
-  // Use cached response if available for GET home/popular requests
-  if (req.method === 'GET' && (targetPath.includes('/home2/') || targetPath.includes('/search/manga'))) {
+  // Use cached response if available for GET requests
+  if (req.method === 'GET') {
     const cached = getCached(cacheKey);
     if (cached) {
-      res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'HIT' });
+      res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'HIT', 'Access-Control-Allow-Origin': '*' });
       res.end(cached);
       return;
     }
@@ -91,28 +112,67 @@ function handleApiProxy(req, res, targetPath, parsedUrl) {
     method: req.method,
     headers
   }, (proxyRes) => {
-    let responseData = '';
-    const contentType = proxyRes.headers['content-type'] || 'application/json';
-
-    res.writeHead(proxyRes.statusCode || 500, {
-      'Content-Type': contentType,
-      'Access-Control-Allow-Origin': '*'
-    });
-
-    proxyRes.on('data', chunk => {
-      responseData += chunk;
-      res.write(chunk);
-    });
-
+    let chunks = [];
+    proxyRes.on('data', chunk => chunks.push(chunk));
     proxyRes.on('end', () => {
-      res.end();
-      if (proxyRes.statusCode === 200 && req.method === 'GET' && responseData.length > 0) {
-        setCache(cacheKey, responseData);
+      const responseBuffer = Buffer.concat(chunks);
+      const isBlock = proxyRes.statusCode === 403 || proxyRes.statusCode === 401 || (responseBuffer.length > 0 && responseBuffer.slice(0, 100).toString().includes('<!DOCTYPE html>'));
+
+      if (isBlock && req.method === 'GET') {
+        console.log(`[Proxy] Direct fetch blocked (status ${proxyRes.statusCode}) for ${targetPath}. Retrying via Scrapfly Unblocker...`);
+        fetchViaScrapfly(fullUrl, (err, sfStatus, sfContent, sfContentType) => {
+          if (err) {
+            console.error('[Proxy] Scrapfly fallback failed:', err.message);
+            res.writeHead(502, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+            res.end(JSON.stringify({ error: 'Scrapfly proxy failed: ' + err.message }));
+            return;
+          }
+          res.writeHead(sfStatus, {
+            'Content-Type': sfContentType,
+            'Access-Control-Allow-Origin': '*',
+            'X-Proxy-Provider': 'scrapfly'
+          });
+          res.end(sfContent);
+          if (sfStatus === 200) {
+            setCache(cacheKey, sfContent);
+          }
+        });
+        return;
+      }
+
+      // Normal direct response (status 200, etc.)
+      const contentType = proxyRes.headers['content-type'] || 'application/json';
+      res.writeHead(proxyRes.statusCode || 500, {
+        'Content-Type': contentType,
+        'Access-Control-Allow-Origin': '*'
+      });
+      res.end(responseBuffer);
+      if (proxyRes.statusCode === 200 && req.method === 'GET' && responseBuffer.length > 0) {
+        setCache(cacheKey, responseBuffer.toString('utf-8'));
       }
     });
   });
 
   proxyReq.on('error', (err) => {
+    // On network error, try Scrapfly as fallback
+    if (req.method === 'GET') {
+      console.log(`[Proxy] Network error for ${targetPath}, trying Scrapfly...`);
+      fetchViaScrapfly(fullUrl, (sfErr, sfStatus, sfContent, sfContentType) => {
+        if (!sfErr && sfContent) {
+          res.writeHead(sfStatus, {
+            'Content-Type': sfContentType,
+            'Access-Control-Allow-Origin': '*',
+            'X-Proxy-Provider': 'scrapfly'
+          });
+          res.end(sfContent);
+          if (sfStatus === 200) setCache(cacheKey, sfContent);
+          return;
+        }
+        res.writeHead(502, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Proxy request failed: ' + err.message }));
+      });
+      return;
+    }
     res.writeHead(502, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Proxy request failed: ' + err.message }));
   });

@@ -152,31 +152,20 @@ class AtsuApiService {
   }
 
   // ---- CDN Image Helpers ----
-  // Routes via the /cdn proxy to circumvent Cloudflare hotlink protection on cdn.atsu.moe
+  // Points directly to https://cdn.atsu.moe (paired with <meta name="referrer" content="no-referrer"> to load images at max speed with 0 proxy credits)
   getImageUrl(imagePath?: string): string {
     if (!imagePath) return '';
     
-    // If it's a full URL to cdn.atsu.moe, rewrite to /cdn proxy
-    if (imagePath.includes('cdn.atsu.moe/static/')) {
-      return imagePath.replace(/^https?:\/\/cdn\.atsu\.moe\/static/, `${CDN_PREFIX}/static`);
-    }
-    if (imagePath.includes('cdn.atsu.moe/')) {
-      return imagePath.replace(/^https?:\/\/cdn\.atsu\.moe/, `${CDN_PREFIX}/static`);
-    }
-    if (imagePath.includes('atsu.moe/static/')) {
-      return imagePath.replace(/^https?:\/\/atsu\.moe\/static/, `${CDN_PREFIX}/static`);
-    }
-
-    // Other external URLs (e.g. gravatar, discord, google)
+    // External full URLs
     if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
       return imagePath;
     }
 
     const clean = imagePath.startsWith('/') ? imagePath : '/' + imagePath;
     if (clean.startsWith('/static/')) {
-      return `${CDN_PREFIX}${clean}`;
+      return `${CDN_BASE}${clean}`;
     }
-    return `${CDN_PREFIX}/static${clean}`;
+    return `${CDN_BASE}/static${clean}`;
   }
 
   getPosterUrl(item?: any, preferredSize: 'small' | 'medium' | 'large' = 'medium'): string {
