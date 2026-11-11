@@ -2,6 +2,7 @@
 import http from 'node:http';
 import https from 'node:https';
 import tls from 'node:tls';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +13,7 @@ const __dirname = path.dirname(__filename);
 const PORT = process.env.PORT || 3300;
 const ATSU_API_BASE = 'https://atsu.moe';
 const ATSU_CDN_BASE = 'https://cdn.atsu.moe';
+const R2_PUBLIC_BASE = 'https://pub-2916bfced0d845f088ad2b3e71104031.r2.dev';
 
 // Dedicated Residential Proxy Configuration
 const PROXY_CONFIG = {
@@ -19,6 +21,92 @@ const PROXY_CONFIG = {
   port: parseInt(process.env.PROXY_PORT || '80', 10),
   auth: process.env.PROXY_AUTH || '4c6169f09d00279c:62f360c1eb4c9da0'
 };
+
+// Cloudflare R2 S3 Upload Configuration
+const R2_CONFIG = {
+  accountId: process.env.R2_ACCOUNT_ID || '226feb5957e769bc4cb99556d587d909',
+  bucket: process.env.R2_BUCKET || 'manga',
+  accessKeyId: process.env.R2_ACCESS_KEY_ID || '',
+  secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || ''
+};
+
+function getR2Key(pathname, query) {
+  const clean = pathname.replace(/^\/api\//, '').replace(/^\//, '');
+  if (clean === 'manga/page') {
+    const id = new URLSearchParams(query).get('id');
+    return id ? `manga/page/${id}.json` : null;
+  }
+  if (clean === 'manga/allChapters') {
+    const mangaId = new URLSearchParams(query).get('mangaId');
+    return mangaId ? `manga/allChapters/${mangaId}.json` : null;
+  }
+  if (clean === 'read/chapter') {
+    const p = new URLSearchParams(query);
+    const m = p.get('mangaId');
+    const c = p.get('chapterId');
+    return (m && c) ? `read/chapter/${m}_${c}.json` : null;
+  }
+  return null;
+}
+
+// Upload buffer/string to Cloudflare R2 bucket using AWS Signature V4
+function uploadToR2(key, body, contentType = 'application/json') {
+  if (!R2_CONFIG.accessKeyId || !R2_CONFIG.secretAccessKey) return;
+
+  try {
+    const host = `${R2_CONFIG.accountId}.r2.cloudflarestorage.com`;
+    const endpoint = `/${R2_CONFIG.bucket}/${key}`;
+    const now = new Date();
+    const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+    const dateStamp = amzDate.slice(0, 8);
+    const region = 'auto';
+    const service = 's3';
+
+    const payloadHash = crypto.createHash('sha256').update(body).digest('hex');
+    const canonicalHeaders = `content-type:${contentType}\nhost:${host}\nx-amz-content-sha256:${payloadHash}\nx-amz-date:${amzDate}\n`;
+    const signedHeaders = 'content-type;host;x-amz-content-sha256;x-amz-date';
+
+    const canonicalRequest = `PUT\n${endpoint}\n\n${canonicalHeaders}\n${signedHeaders}\n${payloadHash}`;
+    const algorithm = 'AWS4-HMAC-SHA256';
+    const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+    const stringToSign = `${algorithm}\n${amzDate}\n${credentialScope}\n${crypto.createHash('sha256').update(canonicalRequest).digest('hex')}`;
+
+    function hmac(k, v) { return crypto.createHmac('sha256', k).update(v).digest(); }
+    const kDate = hmac(`AWS4${R2_CONFIG.secretAccessKey}`, dateStamp);
+    const kRegion = hmac(kDate, region);
+    const kService = hmac(kRegion, service);
+    const kSigning = hmac(kService, 'aws4_request');
+    const signature = crypto.createHmac('sha256', kSigning).update(stringToSign).digest('hex');
+
+    const authHeader = `${algorithm} Credential=${R2_CONFIG.accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+    const r2Req = https.request({
+      host,
+      path: endpoint,
+      method: 'PUT',
+      headers: {
+        'Content-Type': contentType,
+        'Host': host,
+        'x-amz-date': amzDate,
+        'x-amz-content-sha256': payloadHash,
+        'Authorization': authHeader,
+        'Content-Length': Buffer.byteLength(body)
+      }
+    }, (res) => {
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        console.log(`[R2] Successfully stored forever: ${key}`);
+      } else {
+        console.warn(`[R2] Upload status ${res.statusCode} for ${key}`);
+      }
+    });
+
+    r2Req.on('error', err => console.warn(`[R2] Upload error:`, err.message));
+    r2Req.write(body);
+    r2Req.end();
+  } catch (err) {
+    console.warn(`[R2] SigV4 error:`, err.message);
+  }
+}
 
 // Create custom HTTPS agent that tunnels via the residential proxy
 const proxyAgent = new https.Agent({
@@ -136,95 +224,128 @@ function handleApiProxy(req, res, targetPath, parsedUrl) {
   const query = parsedUrl.search || '';
   const fullUrl = `${ATSU_API_BASE}${targetPath}${query}`;
   const cacheKey = req.method + ':' + fullUrl;
+  const r2Key = getR2Key(targetPath, query);
 
-  // Use cached response if available for GET requests
+  function executeProxy() {
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+      'Referer': ATSU_API_BASE + '/',
+      'Accept': 'application/json'
+    };
+
+    const proxyReq = https.request(fullUrl, {
+      method: req.method,
+      headers,
+      agent: proxyAgent
+    }, (proxyRes) => {
+      let chunks = [];
+      proxyRes.on('data', chunk => chunks.push(chunk));
+      proxyRes.on('end', () => {
+        const responseBuffer = Buffer.concat(chunks);
+        const isBlock = proxyRes.statusCode === 403 || proxyRes.statusCode === 401 || (responseBuffer.length > 0 && responseBuffer.slice(0, 100).toString().includes('<!DOCTYPE html>'));
+
+        if (isBlock && req.method === 'GET') {
+          console.log(`[Proxy] Upstream blocked (status ${proxyRes.statusCode}) for ${targetPath}. Retrying via Scrapfly Unblocker...`);
+          fetchViaScrapfly(fullUrl, (err, sfStatus, sfContent, sfContentType) => {
+            if (err) {
+              console.error('[Proxy] Scrapfly fallback failed:', err.message);
+              res.writeHead(502, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+              res.end(JSON.stringify({ error: 'Proxy request failed: ' + err.message }));
+              return;
+            }
+            res.writeHead(sfStatus, {
+              'Content-Type': sfContentType,
+              'Access-Control-Allow-Origin': '*',
+              'X-Proxy-Provider': 'scrapfly'
+            });
+            res.end(sfContent);
+            if (sfStatus === 200) {
+              setCache(cacheKey, sfContent);
+              if (r2Key) uploadToR2(r2Key, sfContent, sfContentType);
+            }
+          });
+          return;
+        }
+
+        // Normal direct response (status 200, etc.)
+        const contentType = proxyRes.headers['content-type'] || 'application/json';
+        res.writeHead(proxyRes.statusCode || 500, {
+          'Content-Type': contentType,
+          'Access-Control-Allow-Origin': '*',
+          'X-Proxy-Provider': 'vaultproxies'
+        });
+        res.end(responseBuffer);
+        if (proxyRes.statusCode === 200 && req.method === 'GET' && responseBuffer.length > 0) {
+          const str = responseBuffer.toString('utf-8');
+          setCache(cacheKey, str);
+          if (r2Key) uploadToR2(r2Key, str, contentType);
+        }
+      });
+    });
+
+    proxyReq.on('error', (err) => {
+      // On network error, try Scrapfly as fallback
+      if (req.method === 'GET') {
+        console.log(`[Proxy] Network error via vaultproxies for ${targetPath}, trying Scrapfly...`);
+        fetchViaScrapfly(fullUrl, (sfErr, sfStatus, sfContent, sfContentType) => {
+          if (!sfErr && sfContent) {
+            res.writeHead(sfStatus, {
+              'Content-Type': sfContentType,
+              'Access-Control-Allow-Origin': '*',
+              'X-Proxy-Provider': 'scrapfly'
+            });
+            res.end(sfContent);
+            if (sfStatus === 200) {
+              setCache(cacheKey, sfContent);
+              if (r2Key) uploadToR2(r2Key, sfContent, sfContentType);
+            }
+            return;
+          }
+          res.writeHead(502, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Proxy request failed: ' + err.message }));
+        });
+        return;
+      }
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Proxy request failed: ' + err.message }));
+    });
+
+    req.pipe(proxyReq);
+  }
+
+  // 1. In-memory RAM Cache check
   if (req.method === 'GET') {
     const cached = getCached(cacheKey);
     if (cached) {
-      res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'HIT', 'Access-Control-Allow-Origin': '*' });
+      res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'RAM-HIT', 'Access-Control-Allow-Origin': '*' });
       res.end(cached);
+      return;
+    }
+
+    // 2. Cloudflare R2 Persistent Storage check
+    if (r2Key) {
+      https.get(`${R2_PUBLIC_BASE}/${r2Key}`, (r2Res) => {
+        if (r2Res.statusCode === 200) {
+          let r2Data = '';
+          r2Res.on('data', c => r2Data += c);
+          r2Res.on('end', () => {
+            setCache(cacheKey, r2Data);
+            res.writeHead(200, {
+              'Content-Type': 'application/json',
+              'X-Cache': 'R2-PERMANENT-HIT',
+              'Access-Control-Allow-Origin': '*'
+            });
+            res.end(r2Data);
+          });
+          return;
+        }
+        executeProxy();
+      }).on('error', () => executeProxy());
       return;
     }
   }
 
-  const headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
-    'Referer': ATSU_API_BASE + '/',
-    'Accept': 'application/json'
-  };
-
-  const proxyReq = https.request(fullUrl, {
-    method: req.method,
-    headers,
-    agent: proxyAgent
-  }, (proxyRes) => {
-    let chunks = [];
-    proxyRes.on('data', chunk => chunks.push(chunk));
-    proxyRes.on('end', () => {
-      const responseBuffer = Buffer.concat(chunks);
-      const isBlock = proxyRes.statusCode === 403 || proxyRes.statusCode === 401 || (responseBuffer.length > 0 && responseBuffer.slice(0, 100).toString().includes('<!DOCTYPE html>'));
-
-      if (isBlock && req.method === 'GET') {
-        console.log(`[Proxy] Upstream blocked (status ${proxyRes.statusCode}) for ${targetPath}. Retrying via Scrapfly Unblocker...`);
-        fetchViaScrapfly(fullUrl, (err, sfStatus, sfContent, sfContentType) => {
-          if (err) {
-            console.error('[Proxy] Scrapfly fallback failed:', err.message);
-            res.writeHead(502, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-            res.end(JSON.stringify({ error: 'Proxy request failed: ' + err.message }));
-            return;
-          }
-          res.writeHead(sfStatus, {
-            'Content-Type': sfContentType,
-            'Access-Control-Allow-Origin': '*',
-            'X-Proxy-Provider': 'scrapfly'
-          });
-          res.end(sfContent);
-          if (sfStatus === 200) {
-            setCache(cacheKey, sfContent);
-          }
-        });
-        return;
-      }
-
-      // Normal direct response (status 200, etc.)
-      const contentType = proxyRes.headers['content-type'] || 'application/json';
-      res.writeHead(proxyRes.statusCode || 500, {
-        'Content-Type': contentType,
-        'Access-Control-Allow-Origin': '*',
-        'X-Proxy-Provider': 'vaultproxies'
-      });
-      res.end(responseBuffer);
-      if (proxyRes.statusCode === 200 && req.method === 'GET' && responseBuffer.length > 0) {
-        setCache(cacheKey, responseBuffer.toString('utf-8'));
-      }
-    });
-  });
-
-  proxyReq.on('error', (err) => {
-    // On network error, try Scrapfly as fallback
-    if (req.method === 'GET') {
-      console.log(`[Proxy] Network error via vaultproxies for ${targetPath}, trying Scrapfly...`);
-      fetchViaScrapfly(fullUrl, (sfErr, sfStatus, sfContent, sfContentType) => {
-        if (!sfErr && sfContent) {
-          res.writeHead(sfStatus, {
-            'Content-Type': sfContentType,
-            'Access-Control-Allow-Origin': '*',
-            'X-Proxy-Provider': 'scrapfly'
-          });
-          res.end(sfContent);
-          if (sfStatus === 200) setCache(cacheKey, sfContent);
-          return;
-        }
-        res.writeHead(502, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Proxy request failed: ' + err.message }));
-      });
-      return;
-    }
-    res.writeHead(502, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Proxy request failed: ' + err.message }));
-  });
-
-  req.pipe(proxyReq);
+  executeProxy();
 }
 
 // Proxy CDN image requests using the residential proxy with Photon fallback

@@ -1,4 +1,25 @@
-// Cloudflare Pages Function: Proxy for Atsu.moe API
+// Cloudflare Pages Function: Proxy & R2 Persistent Cache for Atsu.moe API
+const R2_PUBLIC_BASE = 'https://pub-2916bfced0d845f088ad2b3e71104031.r2.dev';
+
+function getR2Key(pathname, search) {
+  const clean = pathname.replace(/^\/api\//, '').replace(/^\//, '');
+  if (clean === 'manga/page') {
+    const id = new URLSearchParams(search).get('id');
+    return id ? `manga/page/${id}.json` : null;
+  }
+  if (clean === 'manga/allChapters') {
+    const mangaId = new URLSearchParams(search).get('mangaId');
+    return mangaId ? `manga/allChapters/${mangaId}.json` : null;
+  }
+  if (clean === 'read/chapter') {
+    const p = new URLSearchParams(search);
+    const m = p.get('mangaId');
+    const c = p.get('chapterId');
+    return (m && c) ? `read/chapter/${m}_${c}.json` : null;
+  }
+  return null;
+}
+
 export async function onRequest(context) {
   const { request } = context;
   const url = new URL(request.url);
@@ -19,10 +40,48 @@ export async function onRequest(context) {
 
   // Healthcheck endpoint
   if (url.pathname === '/api/health' || url.pathname === '/api/health/') {
-    return new Response(JSON.stringify({ status: 'ok', service: 'voidflix-manga-proxy' }), {
+    return new Response(JSON.stringify({ status: 'ok', service: 'voidflix-manga-proxy', r2Cache: true }), {
       status: 200,
       headers: { 'Content-Type': 'application/json', ...corsHeaders },
     });
+  }
+
+  const r2Key = getR2Key(url.pathname, url.search);
+
+  // 1. Check R2 Cache first (Native Binding or Public R2 URL)
+  if (r2Key && request.method === 'GET') {
+    // Check native Cloudflare Pages R2 binding (if bound in dashboard)
+    if (context.env?.R2_CACHE) {
+      try {
+        const obj = await context.env.R2_CACHE.get(r2Key);
+        if (obj) {
+          return new Response(obj.body, {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Cache': 'R2-BINDING-HIT',
+              ...corsHeaders
+            }
+          });
+        }
+      } catch (e) {}
+    }
+
+    // Check public R2 URL
+    try {
+      const pubRes = await fetch(`${R2_PUBLIC_BASE}/${r2Key}`);
+      if (pubRes.ok) {
+        const bodyText = await pubRes.text();
+        return new Response(bodyText, {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Cache': 'R2-PUBLIC-HIT',
+            ...corsHeaders
+          }
+        });
+      }
+    } catch (e) {}
   }
 
   // Target URL on atsu.moe
@@ -58,17 +117,37 @@ export async function onRequest(context) {
       if (sfRes.ok) {
         const sfData = await sfRes.json();
         if (sfData.result && sfData.result.content) {
-          return new Response(sfData.result.content, {
+          const content = sfData.result.content;
+          // Store in R2 bucket forever
+          if (r2Key && context.env?.R2_CACHE) {
+            context.waitUntil(
+              context.env.R2_CACHE.put(r2Key, content, {
+                httpMetadata: { contentType: 'application/json' }
+              })
+            );
+          }
+
+          return new Response(content, {
             status: sfData.result.status_code || 200,
             headers: {
               'Content-Type': sfData.result.content_type || 'application/json',
               'Access-Control-Allow-Origin': '*',
-              'Cache-Control': 'public, max-age=600, s-maxage=600',
+              'Cache-Control': 'public, max-age=86400',
               'X-Proxy-Provider': 'scrapfly'
             }
           });
         }
       }
+    }
+
+    // Direct response handling
+    const responseBody = await res.text();
+    if (res.ok && r2Key && context.env?.R2_CACHE && request.method === 'GET') {
+      context.waitUntil(
+        context.env.R2_CACHE.put(r2Key, responseBody, {
+          httpMetadata: { contentType: 'application/json' }
+        })
+      );
     }
 
     const responseHeaders = new Headers(res.headers);
@@ -81,7 +160,7 @@ export async function onRequest(context) {
       responseHeaders.set('Cache-Control', 'public, max-age=120, s-maxage=120');
     }
 
-    return new Response(res.body, {
+    return new Response(responseBody, {
       status: res.status,
       statusText: res.statusText,
       headers: responseHeaders,
