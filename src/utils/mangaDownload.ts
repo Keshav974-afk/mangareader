@@ -20,8 +20,8 @@ export interface DownloadProgress {
   message: string;
 }
 
-// Concurrency pool size for parallel network downloads
-const DOWNLOAD_CONCURRENCY = 8;
+// Concurrency pool size: 5 workers balances speed with mobile memory safety
+const DOWNLOAD_CONCURRENCY = 5;
 
 /**
  * Concurrency runner: executes tasks with up to `concurrency` parallel workers
@@ -44,7 +44,12 @@ async function mapConcurrent<T, R>(
   const workers = Array.from({ length: workerCount }, async () => {
     while (currentIndex < total) {
       const idx = currentIndex++;
-      results[idx] = await taskFn(items[idx], idx);
+      try {
+        results[idx] = await taskFn(items[idx], idx);
+      } catch (err) {
+        console.warn(`Task at index ${idx} failed:`, err);
+        throw err;
+      }
       completed++;
       onTaskDone?.(completed, total);
     }
@@ -80,19 +85,48 @@ export function getPdfSourceUrl(pages: Page[], chapter?: Chapter | null): string
 }
 
 /**
- * Decodes an image blob into dimensions and a standardized JPEG DataURL.
- * Uses hardware-accelerated createImageBitmap when available for maximum speed.
+ * Creates a clean placeholder fallback page so that decoding issues never hang the PDF.
  */
-async function decodeImageToDataUrl(rawBlob: Blob): Promise<{
+function createFallbackPage(pageNumber: number): {
   width: number;
   height: number;
   dataUrl: string;
-  blob: Blob;
+} {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1000;
+  canvas.height = 1400;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#0f0f14';
+    ctx.fillRect(0, 0, 1000, 1400);
+    ctx.fillStyle = '#888888';
+    ctx.font = 'bold 36px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`Page ${pageNumber}`, 500, 700);
+  }
+  return {
+    width: 1000,
+    height: 1400,
+    dataUrl: canvas.toDataURL('image/jpeg', 0.8)
+  };
+}
+
+/**
+ * Decodes an image blob into dimensions and a standardized JPEG DataURL.
+ * Uses hardware-accelerated createImageBitmap with strict timeouts to ensure it NEVER hangs.
+ */
+async function decodeImageToDataUrl(rawBlob: Blob, pageNum: number): Promise<{
+  width: number;
+  height: number;
+  dataUrl: string;
 }> {
-  // Fast path: Hardware-accelerated createImageBitmap (modern browsers)
+  // 1. Fast path: Hardware-accelerated createImageBitmap with 6s timeout
   if (typeof createImageBitmap === 'function') {
     try {
-      const bmp = await createImageBitmap(rawBlob);
+      const bmp = await Promise.race([
+        createImageBitmap(rawBlob),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('createImageBitmap timeout')), 6000))
+      ]);
       const width = bmp.width || 1200;
       const height = bmp.height || 1800;
 
@@ -103,21 +137,31 @@ async function decodeImageToDataUrl(rawBlob: Blob): Promise<{
       if (ctx) {
         ctx.drawImage(bmp, 0, 0);
         bmp.close();
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
-        return { width, height, dataUrl, blob: rawBlob };
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.86);
+        return { width, height, dataUrl };
       }
     } catch {
       // Fall through to Image element
     }
   }
 
-  // Fallback: standard HTMLImageElement
+  // 2. Fallback: standard HTMLImageElement with strict 8s timeout
   const blobUrl = URL.createObjectURL(rawBlob);
   try {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`Image decode timeout for page ${pageNum}`));
+      }, 8000);
+
       const image = new Image();
-      image.onload = () => resolve(image);
-      image.onerror = () => reject(new Error('Failed to decode image'));
+      image.onload = () => {
+        clearTimeout(timer);
+        resolve(image);
+      };
+      image.onerror = () => {
+        clearTimeout(timer);
+        reject(new Error(`Image decode error for page ${pageNum}`));
+      };
       image.src = blobUrl;
     });
 
@@ -131,82 +175,96 @@ async function decodeImageToDataUrl(rawBlob: Blob): Promise<{
     if (!ctx) throw new Error('Could not get canvas context');
 
     ctx.drawImage(img, 0, 0, width, height);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
-    return { width, height, dataUrl, blob: rawBlob };
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.86);
+    return { width, height, dataUrl };
   } finally {
     URL.revokeObjectURL(blobUrl);
   }
 }
 
 /**
- * High-speed page image fetcher for PDF compiling:
- * Fetches blob using browser HTTP cache, then decodes asynchronously.
+ * Fetches and decodes a single page for PDF with auto-retry and fallback so it never hangs.
  */
-async function fetchPageForPdf(pageUrl: string): Promise<{
+async function fetchPageForPdfWithFallback(pageUrl: string, pageNum: number): Promise<{
   width: number;
   height: number;
   dataUrl: string;
 }> {
-  const res = await fetch(pageUrl, { cache: 'force-cache' });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const rawBlob = await res.blob();
-  const decoded = await decodeImageToDataUrl(rawBlob);
-  return {
-    width: decoded.width,
-    height: decoded.height,
-    dataUrl: decoded.dataUrl
-  };
+  try {
+    const res = await fetch(pageUrl, { cache: 'force-cache' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rawBlob = await res.blob();
+    return await decodeImageToDataUrl(rawBlob, pageNum);
+  } catch (err) {
+    console.warn(`Initial fetch/decode failed for page ${pageNum}, retrying...`, err);
+    try {
+      const retryUrl = pageUrl + (pageUrl.includes('?') ? '&' : '?') + 'r=' + Date.now();
+      const res = await fetch(retryUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const rawBlob = await res.blob();
+      return await decodeImageToDataUrl(rawBlob, pageNum);
+    } catch {
+      return createFallbackPage(pageNum);
+    }
+  }
 }
 
 /**
  * Ultra-fast page fetcher for CBZ:
- * Directly keeps JPEG, PNG, and WebP blobs without canvas re-encoding!
- * Only converts AVIF when necessary so any comic reader can open it.
+ * Directly keeps JPEG, PNG, and WebP blobs without canvas re-encoding.
  */
 async function fetchPageForCbz(pageUrl: string, pageNum: number): Promise<{
   filename: string;
   blob: Blob;
 }> {
-  const res = await fetch(pageUrl, { cache: 'force-cache' });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const rawBlob = await res.blob();
-
-  const type = rawBlob.type.toLowerCase();
-  const pad = String(pageNum).padStart(3, '0');
-
-  // Fast path: If already standard JPEG, PNG, or WebP, use raw bytes directly (0ms encoding!)
-  if (type.includes('jpeg') || type.includes('jpg')) {
-    return { filename: `${pad}.jpg`, blob: rawBlob };
-  }
-  if (type.includes('png')) {
-    return { filename: `${pad}.png`, blob: rawBlob };
-  }
-  if (type.includes('webp')) {
-    return { filename: `${pad}.webp`, blob: rawBlob };
-  }
-
-  // If AVIF, transcode to JPEG for maximum reader compatibility
   try {
-    const decoded = await decodeImageToDataUrl(rawBlob);
-    const jpegBlob = await new Promise<Blob>((resolve) => {
+    const res = await fetch(pageUrl, { cache: 'force-cache' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rawBlob = await res.blob();
+
+    const type = rawBlob.type.toLowerCase();
+    const pad = String(pageNum).padStart(3, '0');
+
+    // Fast path: If already standard JPEG, PNG, or WebP, use raw bytes directly
+    if (type.includes('jpeg') || type.includes('jpg')) {
+      return { filename: `${pad}.jpg`, blob: rawBlob };
+    }
+    if (type.includes('png')) {
+      return { filename: `${pad}.png`, blob: rawBlob };
+    }
+    if (type.includes('webp')) {
+      return { filename: `${pad}.webp`, blob: rawBlob };
+    }
+
+    // If AVIF, transcode to JPEG
+    try {
+      const decoded = await decodeImageToDataUrl(rawBlob, pageNum);
       const canvas = document.createElement('canvas');
       canvas.width = decoded.width;
       canvas.height = decoded.height;
       const ctx = canvas.getContext('2d', { alpha: false });
       if (ctx) {
-        const img = new Image();
-        img.onload = () => {
-          ctx.drawImage(img, 0, 0);
-          canvas.toBlob((b) => resolve(b || rawBlob), 'image/jpeg', 0.90);
-        };
-        img.onerror = () => resolve(rawBlob);
-        img.src = decoded.dataUrl;
-      } else {
-        resolve(rawBlob);
+        const jpegBlob = await new Promise<Blob>((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            ctx.drawImage(img, 0, 0);
+            canvas.toBlob((b) => resolve(b || rawBlob), 'image/jpeg', 0.88);
+          };
+          img.onerror = () => resolve(rawBlob);
+          img.src = decoded.dataUrl;
+        });
+        return { filename: `${pad}.jpg`, blob: jpegBlob };
       }
-    });
-    return { filename: `${pad}.jpg`, blob: jpegBlob };
+      return { filename: `${pad}.jpg`, blob: rawBlob };
+    } catch {
+      return { filename: `${pad}.jpg`, blob: rawBlob };
+    }
   } catch {
+    // Retry once
+    const retryUrl = pageUrl + (pageUrl.includes('?') ? '&' : '?') + 'r=' + Date.now();
+    const res = await fetch(retryUrl);
+    const rawBlob = await res.blob();
+    const pad = String(pageNum).padStart(3, '0');
     return { filename: `${pad}.jpg`, blob: rawBlob };
   }
 }
@@ -238,8 +296,9 @@ function createComicInfoXml(meta: {
 
 /**
  * High-Speed Parallel PDF Download:
- * Fetches all pages simultaneously across 8 concurrent connections,
- * then rapidly compiles them into a multi-page PDF document.
+ * 1. Parallel downloads pages without canvas/memory overload.
+ * 2. Progressively builds jsPDF page-by-page while yielding to the UI.
+ * 3. Disables CPU-heavy deflate compression (compress: false) so blob generation is instant.
  */
 export async function downloadImageComicAsPdf(
   pages: Page[],
@@ -249,15 +308,15 @@ export async function downloadImageComicAsPdf(
   const total = pages.length;
   if (total === 0) throw new Error('No comic pages found to download');
 
-  // 1. Parallel fetch and decode of all pages
+  // Step 1: Parallel fetch and decode of all pages (70% progress)
   const pageUrls = pages.map((p) => api.getImageUrl(p.image));
 
   const pagesData = await mapConcurrent(
     pageUrls,
     DOWNLOAD_CONCURRENCY,
-    async (url) => fetchPageForPdf(url),
+    async (url, idx) => fetchPageForPdfWithFallback(url, idx + 1),
     (done) => {
-      const percent = Math.round((done / total) * 80);
+      const percent = Math.round((done / total) * 70);
       onProgress?.({
         current: done,
         total,
@@ -267,20 +326,25 @@ export async function downloadImageComicAsPdf(
     }
   );
 
-  // 2. Fast sequential assembly into jsPDF in memory
-  onProgress?.({
-    current: total,
-    total,
-    percent: 85,
-    message: 'Compiling PDF document...'
-  });
-
+  // Step 2: Progressive assembly into jsPDF with UI yielding & memory release
   let pdfDoc: jsPDF | null = null;
 
   for (let i = 0; i < total; i++) {
+    const pageNum = i + 1;
+    const percent = 70 + Math.round((pageNum / total) * 24); // 70% to 94%
+    onProgress?.({
+      current: pageNum,
+      total,
+      percent,
+      message: `Assembling PDF page ${pageNum} of ${total}...`
+    });
+
+    // Yield execution so React paints the progress bar and avoids freezing UI
+    await new Promise((r) => setTimeout(r, 15));
+
     const pageData = pagesData[i];
-    const ptWidth = pageData.width * 0.75;
-    const ptHeight = pageData.height * 0.75;
+    const ptWidth = Math.max(100, pageData.width * 0.75);
+    const ptHeight = Math.max(100, pageData.height * 0.75);
     const orientation = ptWidth > ptHeight ? 'landscape' : 'portrait';
 
     if (i === 0) {
@@ -288,23 +352,36 @@ export async function downloadImageComicAsPdf(
         orientation,
         unit: 'pt',
         format: [ptWidth, ptHeight],
-        compress: true
+        compress: false // CRITICAL: false prevents synchronous deflate hang during output('blob')
       });
       pdfDoc.addImage(pageData.dataUrl, 'JPEG', 0, 0, ptWidth, ptHeight, undefined, 'FAST');
     } else {
       pdfDoc!.addPage([ptWidth, ptHeight], orientation);
       pdfDoc!.addImage(pageData.dataUrl, 'JPEG', 0, 0, ptWidth, ptHeight, undefined, 'FAST');
     }
+
+    // Release base64 dataUrl from memory immediately
+    pageData.dataUrl = '';
   }
 
   onProgress?.({
     current: total,
     total,
-    percent: 95,
-    message: 'Generating PDF file...'
+    percent: 96,
+    message: 'Finalizing PDF file...'
   });
 
+  await new Promise((r) => setTimeout(r, 20));
+
   const pdfBlob = pdfDoc!.output('blob');
+
+  onProgress?.({
+    current: total,
+    total,
+    percent: 99,
+    message: 'Saving PDF to device...'
+  });
+
   triggerBrowserDownload(pdfBlob, filename.endsWith('.pdf') ? filename : `${filename}.pdf`);
 
   onProgress?.({
@@ -317,9 +394,9 @@ export async function downloadImageComicAsPdf(
 
 /**
  * Ultra-Fast Parallel CBZ Download:
- * 1. Downloads up to 8 pages in parallel.
- * 2. Directly packages original compressed bytes without re-encoding.
- * 3. Uses ZIP 'STORE' compression (standard for comic readers), completing in ~100ms.
+ * 1. Downloads pages in parallel.
+ * 2. Uses original compressed image bytes directly.
+ * 3. Uses ZIP 'STORE' compression (finishes in ~100ms).
  */
 export async function downloadImageComicAsCbz(
   pages: Page[],
@@ -371,7 +448,7 @@ export async function downloadImageComicAsCbz(
     message: 'Packaging Comic Book ZIP (.cbz)...'
   });
 
-  // 3. Fast STORE packaging (instantaneous, no CPU wasted re-compressing images)
+  // 3. Fast STORE packaging (instantaneous)
   const cbzBlob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
   triggerBrowserDownload(cbzBlob, filename.endsWith('.cbz') ? filename : `${filename}.cbz`);
 
@@ -457,10 +534,10 @@ export async function downloadPdfComicAsCbz(
 
   const pageNumbers = Array.from({ length: numPages }, (_, i) => i + 1);
 
-  // Render PDF pages with concurrency of 4 (GPU/Canvas limit)
+  // Render PDF pages with concurrency of 3
   const renderedPages = await mapConcurrent(
     pageNumbers,
-    4,
+    3,
     async (pageIndex) => {
       const page = await pdf.getPage(pageIndex);
       const viewport = page.getViewport({ scale: 2.0 });
@@ -474,7 +551,7 @@ export async function downloadPdfComicAsCbz(
       await (page.render({ canvasContext: ctx, viewport, canvas } as any)).promise;
 
       const pageBlob = await new Promise<Blob>((resolve) => {
-        canvas.toBlob((b) => resolve(b!), 'image/jpeg', 0.88);
+        canvas.toBlob((b) => resolve(b!), 'image/jpeg', 0.86);
       });
 
       const pageIndexStr = String(pageIndex).padStart(3, '0');
