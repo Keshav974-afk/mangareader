@@ -413,7 +413,7 @@ export const NovelReader: React.FC<NovelReaderProps> = ({
           <button
             onClick={() => nextChapter && onNavigate(`#/read/${mangaId}/${nextChapter.id}`)}
             disabled={!nextChapter}
-            className={`px-6 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-white flex items-center gap-2 font-bold text-sm shadow-lg shadow-brand-500/20 transition ${
+            className={`px-6 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-white flex items-center gap-2 font-bold text-sm transition ${
               !nextChapter ? 'opacity-30 cursor-not-allowed' : 'active:scale-95'
             }`}
           >

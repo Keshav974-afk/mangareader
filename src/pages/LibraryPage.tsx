@@ -85,7 +85,7 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onNavigate }) => {
                 <div
                   key={item.mangaId}
                   onClick={() => onNavigate(`#/read/${item.mangaId}/${item.chapterId}`)}
-                  className="p-3.5 rounded-2xl bg-carbon-900 border border-white/10 hover:border-brand-500/40 cursor-pointer transition-all hover:-translate-y-1 group relative shadow-lg"
+                  className="p-3.5 rounded-2xl bg-carbon-900 border border-white/10 hover:border-white/30 cursor-pointer transition-all hover:-translate-y-1 group relative"
                 >
                   <div className="flex gap-3">
                     <div className="w-16 h-24 rounded-xl bg-carbon-800 overflow-hidden shrink-0 relative">

@@ -83,10 +83,10 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
         
         {/* Badges Row */}
         <div className="flex flex-wrap items-center gap-2 mb-3">
-          <span className={`text-[11px] font-extrabold uppercase px-2.5 py-1 rounded-md backdrop-blur-md ${
+          <span className={`text-[11px] font-extrabold uppercase px-2.5 py-1 rounded-md backdrop-blur-md border ${
             isNovel 
-              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30' 
-              : 'bg-brand-500 text-white shadow-md shadow-brand-500/30'
+              ? 'bg-indigo-600/90 text-white border-indigo-400/20' 
+              : 'bg-brand-600/90 text-white border-brand-400/20'
           }`}>
             {isNovel ? 'Light Novel' : (current.type || 'Manga')}
           </span>
@@ -112,13 +112,13 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
         </div>
 
         {/* Title */}
-        <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-tight mb-3 drop-shadow-md line-clamp-2">
+        <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-tight mb-3 line-clamp-2">
           {current.title}
         </h1>
 
         {/* Synopsis / Description */}
         {current.synopsis ? (
-          <p className="text-xs sm:text-sm text-gray-300 line-clamp-2 sm:line-clamp-3 leading-relaxed mb-6 max-w-2xl drop-shadow">
+          <p className="text-xs sm:text-sm text-gray-300 line-clamp-2 sm:line-clamp-3 leading-relaxed mb-6 max-w-2xl">
             {current.synopsis}
           </p>
         ) : null}
@@ -127,7 +127,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
         <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={() => onNavigate(`#/manga/${current.id}`)}
-            className="px-6 py-3 rounded-xl bg-brand-500 hover:bg-brand-400 text-white font-bold text-sm flex items-center gap-2 shadow-lg shadow-brand-500/30 active:scale-95 transition-all"
+            className="px-6 py-3 rounded-xl bg-brand-500 hover:bg-brand-400 text-white font-bold text-sm flex items-center gap-2 active:scale-95 transition-all"
           >
             {isNovel ? <BookText className="w-4 h-4" /> : <Play className="w-4 h-4 fill-white" />}
             <span>Read Now</span>
@@ -145,7 +145,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
             onClick={() => onToggleBookmark(current)}
             className={`p-3 rounded-xl backdrop-blur-md border transition-all active:scale-95 ${
               bookmarked 
-                ? 'bg-brand-500/20 text-brand-400 border-brand-500/40' 
+                ? 'bg-brand-500/20 text-brand-400 border-brand-500/30' 
                 : 'bg-white/10 hover:bg-white/20 text-white border-white/15'
             }`}
             title={bookmarked ? 'In Library' : 'Add to Library'}

@@ -405,7 +405,7 @@ export const MangaReader: React.FC<MangaReaderProps> = ({
             <button
               onClick={() => nextChapter && onNavigate(`#/read/${mangaId}/${nextChapter.id}`)}
               disabled={!nextChapter}
-              className={`px-3.5 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-white transition flex items-center gap-1.5 shadow-md shadow-brand-500/20 ${
+              className={`px-3.5 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-white transition flex items-center gap-1.5 ${
                 !nextChapter ? 'opacity-30 cursor-not-allowed' : 'active:scale-95'
               }`}
             >

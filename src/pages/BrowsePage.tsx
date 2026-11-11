@@ -118,8 +118,8 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({ category, onNavigate }) 
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-2 border-b border-white/10">
         <div>
           {category === 'latest' && (
-            <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-brand-500/15 border border-brand-500/30 text-brand-400 text-[11px] font-black uppercase tracking-wider w-fit mb-2">
-              <Sparkles className="w-3.5 h-3.5" />
+            <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-gray-200 text-[11px] font-bold uppercase tracking-wider w-fit mb-2">
+              <Sparkles className="w-3.5 h-3.5 text-brand-400" />
               <span>Real-Time Chapter Updates</span>
             </div>
           )}
@@ -197,7 +197,7 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({ category, onNavigate }) 
               <button
                 onClick={() => fetchBatch(offset, false)}
                 disabled={isLoadingMore}
-                className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-brand-600 to-emerald-500 hover:from-brand-500 hover:to-emerald-400 text-white font-extrabold text-sm shadow-xl shadow-brand-500/25 flex items-center gap-2.5 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-brand-600 to-emerald-600 hover:from-brand-500 hover:to-emerald-500 text-white font-extrabold text-sm border border-white/10 flex items-center gap-2.5 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
               >
                 {isLoadingMore ? (
                   <>

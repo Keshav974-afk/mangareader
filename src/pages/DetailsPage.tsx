@@ -237,7 +237,7 @@ export const DetailsPage: React.FC<DetailsPageProps> = ({ mangaId, onNavigate })
               {resumeChapter && (
                 <button
                   onClick={() => onNavigate(`#/read/${info.id}/${resumeChapter.id}`)}
-                  className="w-full sm:w-auto px-6 py-3.5 sm:py-3 rounded-xl bg-brand-500 hover:bg-brand-400 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-brand-500/25 active:scale-95 transition-all"
+                  className="w-full sm:w-auto px-6 py-3.5 sm:py-3 rounded-xl bg-brand-500 hover:bg-brand-400 text-white font-bold text-sm flex items-center justify-center gap-2 border border-white/10 active:scale-95 transition-all"
                 >
                   {isNovel ? <BookText className="w-4 h-4" /> : <Play className="w-4 h-4 fill-white" />}
                   <span>{progress ? `Resume Ch. ${progress.chapterNumber}` : 'Start Reading'}</span>

@@ -53,7 +53,7 @@ export const MangaCard: React.FC<MangaCardProps> = ({ item, onNavigate, width = 
       className={`group relative ${width.includes('w-full') ? 'w-full' : 'shrink-0 ' + width} cursor-pointer select-none transition-all duration-300 hover:-translate-y-1 active:scale-95`}
     >
       {/* Poster wrapper with aspect ratio 2/3 */}
-      <div className="relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-carbon-800 border border-white/[0.08] group-hover:border-brand-500/50 shadow-md group-hover:shadow-xl group-hover:shadow-brand-500/10 transition-all">
+      <div className="relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-carbon-800 border border-white/[0.08] group-hover:border-white/30 transition-all">
         {imgError || !imgSrc ? (
           <div className="w-full h-full flex flex-col items-center justify-center p-3 text-center bg-carbon-850 text-gray-500">
             {isNovel ? <BookText className="w-8 h-8 mb-2 opacity-50" /> : <BookOpen className="w-8 h-8 mb-2 opacity-50" />}
@@ -100,8 +100,8 @@ export const MangaCard: React.FC<MangaCardProps> = ({ item, onNavigate, width = 
             </span>
           ) : <span />}
           {item.updatedAt ? (
-            <span className="text-[9px] font-bold text-brand-300 bg-black/80 px-1.5 py-0.5 rounded backdrop-blur border border-brand-500/30 flex items-center gap-1 shadow-sm">
-              <Clock className="w-2.5 h-2.5 text-brand-400" />
+            <span className="text-[9px] font-semibold text-gray-200 bg-black/85 px-1.5 py-0.5 rounded backdrop-blur border border-white/10 flex items-center gap-1">
+              <Clock className="w-2.5 h-2.5 text-gray-400" />
               {formatTimeAgo(item.updatedAt)}
             </span>
           ) : null}

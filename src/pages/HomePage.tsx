@@ -315,7 +315,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                 onClick={() => setExploreSort('latest')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                   exploreSort === 'latest'
-                    ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
+                    ? 'bg-brand-500 text-white'
                     : 'text-gray-400 hover:text-white hover:bg-white/5'
                 }`}
               >
@@ -326,7 +326,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                 onClick={() => setExploreSort('hot')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                   exploreSort === 'hot'
-                    ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
+                    ? 'bg-brand-500 text-white'
                     : 'text-gray-400 hover:text-white hover:bg-white/5'
                 }`}
               >
@@ -337,7 +337,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                 onClick={() => setExploreSort('popular')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                   exploreSort === 'popular'
-                    ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
+                    ? 'bg-brand-500 text-white'
                     : 'text-gray-400 hover:text-white hover:bg-white/5'
                 }`}
               >
@@ -394,7 +394,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             <button
               onClick={() => fetchExploreBatch(exploreOffset, false)}
               disabled={isLoadingMore}
-              className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-brand-600 to-emerald-500 hover:from-brand-500 hover:to-emerald-400 text-white font-extrabold text-sm shadow-xl shadow-brand-500/25 flex items-center gap-2.5 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed group"
+              className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-brand-600 to-emerald-600 hover:from-brand-500 hover:to-emerald-500 text-white font-extrabold text-sm border border-white/10 flex items-center gap-2.5 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed group"
             >
               {isLoadingMore ? (
                 <>

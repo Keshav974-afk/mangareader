@@ -61,13 +61,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => onNavigate('#/')}
             className="flex items-center gap-2 sm:gap-2.5 text-left group shrink-0 active:scale-95 transition-transform"
           >
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-red-600 via-rose-600 to-red-700 flex items-center justify-center text-white shadow-lg shadow-red-600/30 group-hover:scale-105 transition-transform">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-red-600 via-rose-600 to-red-700 flex items-center justify-center text-white border border-white/10 group-hover:scale-105 transition-transform">
               <span className="font-black text-sm sm:text-base tracking-tighter">V</span>
             </div>
             <div>
               <span className="font-black tracking-tight text-base sm:text-lg text-white transition-colors flex items-center gap-1.5">
                 VOID<span className="text-red-500">FLIX</span>
-                <span className="text-brand-400 text-[10px] sm:text-xs px-1.5 py-0.5 rounded bg-brand-500/15 border border-brand-500/25 font-black uppercase tracking-wider">
+                <span className="text-gray-300 text-[10px] sm:text-xs px-1.5 py-0.5 rounded bg-white/5 border border-white/10 font-bold uppercase tracking-wider">
                   MANGA
                 </span>
               </span>
@@ -85,7 +85,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onClick={() => onNavigate(item.route)}
                   className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                     isActive 
-                      ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25' 
+                      ? 'bg-brand-500 text-white font-bold' 
                       : 'text-gray-400 hover:text-white hover:bg-white/5'
                   }`}
                 >
@@ -106,7 +106,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {installPrompt && (
               <button
                 onClick={handleInstallClick}
-                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-brand-500/15 hover:bg-brand-500/25 border border-brand-500/30 text-brand-400 text-xs font-bold transition-all active:scale-95"
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-200 text-xs font-bold transition-all active:scale-95"
                 title="Install Voidflix Manga App (PWA)"
               >
                 <Download className="w-3.5 h-3.5" />
@@ -116,7 +116,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             <button
               onClick={onOpenSearch}
-              className="flex items-center gap-2 sm:gap-3 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-white/[0.06] hover:bg-white/10 border border-white/10 text-gray-300 text-xs font-medium transition-all group active:scale-95 shadow-sm"
+              className="flex items-center gap-2 sm:gap-3 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-white/[0.06] hover:bg-white/10 border border-white/10 text-gray-300 text-xs font-medium transition-all group active:scale-95"
               title="Search titles, authors, or genres (Ctrl + K)"
             >
               <Search className="w-4 h-4 text-brand-400 group-hover:scale-110 transition-transform" />
@@ -133,7 +133,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Mobile Fixed Bottom Navigation Bar */}
       <nav 
-        className="md:hidden fixed bottom-0 inset-x-0 z-50 glass-nav border-t border-white/10 bg-carbon-950/95 backdrop-blur-xl px-2 py-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-2xl transition-all"
+        className="md:hidden fixed bottom-0 inset-x-0 z-50 glass-nav border-t border-white/10 bg-carbon-950/95 backdrop-blur-xl px-2 py-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] transition-all"
         aria-label="Mobile Navigation"
       >
         <div className="flex items-center justify-around max-w-md mx-auto">
@@ -158,7 +158,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 {/* Active pill indicator */}
                 {isActive && (
-                  <span className="absolute -top-1 w-8 h-1 rounded-full bg-brand-500 shadow-sm shadow-brand-500" />
+                  <span className="absolute -top-1 w-8 h-1 rounded-full bg-brand-500" />
                 )}
 
                 <div className="relative">
