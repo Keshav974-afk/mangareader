@@ -84,7 +84,7 @@ function handleApiProxy(req, res, targetPath, parsedUrl) {
   // Healthcheck
   if (targetPath === '/api/health' || targetPath === '/api/health/') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', proxy: 'voidflix-manga-proxy', time: new Date().toISOString() }));
+    res.end(JSON.stringify({ status: 'ok', proxy: 'voidflix-manga-proxy', version: '2.0-scrapfly', time: new Date().toISOString() }));
     return;
   }
 
