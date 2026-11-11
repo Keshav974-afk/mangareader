@@ -1,23 +1,51 @@
-// Cloudflare Pages Function: Proxy & R2 Persistent Cache for Atsu.moe API
+// Cloudflare Pages Function: Proxy & Smart Tiered R2 Persistent Cache for Atsu.moe API
 const R2_PUBLIC_BASE = 'https://pub-2916bfced0d845f088ad2b3e71104031.r2.dev';
 
-function getR2Key(pathname, search) {
+// Smart Tiered Cache Policies:
+// 1. FOREVER: Published chapter pages & text (never changes once published, e.g. Ch 321)
+// 2. TEMPORARY: Series info (1 hour) & Chapter lists (2 hours, so newly dropped chapters appear)
+// 3. NO_R2: Home feeds, search results (RAM only, 10 min TTL)
+function getCachePolicy(pathname, search) {
   const clean = pathname.replace(/^\/api\//, '').replace(/^\//, '');
-  if (clean === 'manga/page') {
-    const id = new URLSearchParams(search).get('id');
-    return id ? `manga/page/${id}.json` : null;
-  }
-  if (clean === 'manga/allChapters') {
-    const mangaId = new URLSearchParams(search).get('mangaId');
-    return mangaId ? `manga/allChapters/${mangaId}.json` : null;
-  }
+
+  // A. FOREVER CACHE (Immutable chapter content)
   if (clean === 'read/chapter') {
     const p = new URLSearchParams(search);
     const m = p.get('mangaId');
     const c = p.get('chapterId');
-    return (m && c) ? `read/chapter/${m}_${c}.json` : null;
+    if (m && c) {
+      return { type: 'FOREVER', key: `read/chapter/${m}_${c}.json`, maxAge: 31536000, ttlMs: Infinity };
+    }
   }
-  return null;
+
+  if (clean === 'read/novelChapter') {
+    const p = new URLSearchParams(search);
+    const m = p.get('mangaId');
+    const c = p.get('chapterId');
+    if (m && c) {
+      return { type: 'FOREVER', key: `read/novelChapter/${m}_${c}.json`, maxAge: 31536000, ttlMs: Infinity };
+    }
+  }
+
+  // B. TEMPORARY CACHE (Series metadata & chapters list)
+  if (clean === 'manga/allChapters') {
+    const mangaId = new URLSearchParams(search).get('mangaId');
+    if (mangaId) {
+      // 2 hours TTL so new chapters released by scanlators show up
+      return { type: 'TEMPORARY', key: `manga/allChapters/${mangaId}.json`, maxAge: 7200, ttlMs: 2 * 60 * 60 * 1000 };
+    }
+  }
+
+  if (clean === 'manga/page') {
+    const id = new URLSearchParams(search).get('id');
+    if (id) {
+      // 1 hour TTL
+      return { type: 'TEMPORARY', key: `manga/page/${id}.json`, maxAge: 3600, ttlMs: 60 * 60 * 1000 };
+    }
+  }
+
+  // C. NO R2 (Home feeds, search - ephemeral)
+  return { type: 'NO_R2', key: null, maxAge: 600, ttlMs: 10 * 60 * 1000 };
 }
 
 export async function onRequest(context) {
@@ -46,42 +74,68 @@ export async function onRequest(context) {
     });
   }
 
-  const r2Key = getR2Key(url.pathname, url.search);
+  const policy = getCachePolicy(url.pathname, url.search);
 
-  // 1. Check R2 Cache first (Native Binding or Public R2 URL)
-  if (r2Key && request.method === 'GET') {
+  // 1. Check R2 Cache first according to policy (Native Binding or Public R2 URL)
+  if (policy.key && request.method === 'GET') {
     // Check native Cloudflare Pages R2 binding (if bound in dashboard)
     if (context.env?.R2_CACHE) {
       try {
-        const obj = await context.env.R2_CACHE.get(r2Key);
+        const obj = await context.env.R2_CACHE.get(policy.key);
         if (obj) {
-          return new Response(obj.body, {
-            status: 200,
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Cache': 'R2-BINDING-HIT',
-              ...corsHeaders
-            }
-          });
+          const age = Date.now() - obj.uploaded.getTime();
+          if (policy.type === 'FOREVER' || age < policy.ttlMs) {
+            return new Response(obj.body, {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/json',
+                'Cache-Control': policy.type === 'FOREVER' ? 'public, max-age=31536000, immutable' : `public, max-age=${Math.max(60, Math.floor((policy.ttlMs - age) / 1000))}`,
+                'X-Cache': `R2-${policy.type}-HIT`,
+                ...corsHeaders
+              }
+            });
+          }
         }
       } catch (e) {}
     }
 
     // Check public R2 URL
     try {
-      const pubRes = await fetch(`${R2_PUBLIC_BASE}/${r2Key}`);
+      const pubRes = await fetch(`${R2_PUBLIC_BASE}/${policy.key}`);
       if (pubRes.ok) {
-        const bodyText = await pubRes.text();
-        return new Response(bodyText, {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Cache': 'R2-PUBLIC-HIT',
-            ...corsHeaders
-          }
-        });
+        const lastMod = pubRes.headers.get('last-modified');
+        const age = lastMod ? Date.now() - new Date(lastMod).getTime() : 0;
+        if (policy.type === 'FOREVER' || age < policy.ttlMs) {
+          const bodyText = await pubRes.text();
+          return new Response(bodyText, {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              'Cache-Control': policy.type === 'FOREVER' ? 'public, max-age=31536000, immutable' : `public, max-age=${Math.max(60, Math.floor((policy.ttlMs - age) / 1000))}`,
+              'X-Cache': `R2-PUBLIC-${policy.type}-HIT`,
+              ...corsHeaders
+            }
+          });
+        }
       }
     } catch (e) {}
+  }
+
+  function saveToR2(content) {
+    if (policy.key && context.env?.R2_CACHE && request.method === 'GET' && content) {
+      context.waitUntil(
+        context.env.R2_CACHE.put(policy.key, content, {
+          httpMetadata: {
+            contentType: 'application/json',
+            cacheControl: policy.type === 'FOREVER' ? 'public, max-age=31536000, immutable' : `public, max-age=${policy.maxAge}`
+          },
+          customMetadata: {
+            cachedAt: String(Date.now()),
+            policy: policy.type
+          }
+        })
+      );
+    }
   }
 
   // Target URL on atsu.moe
@@ -118,21 +172,14 @@ export async function onRequest(context) {
         const sfData = await sfRes.json();
         if (sfData.result && sfData.result.content) {
           const content = sfData.result.content;
-          // Store in R2 bucket forever
-          if (r2Key && context.env?.R2_CACHE) {
-            context.waitUntil(
-              context.env.R2_CACHE.put(r2Key, content, {
-                httpMetadata: { contentType: 'application/json' }
-              })
-            );
-          }
+          saveToR2(content);
 
           return new Response(content, {
             status: sfData.result.status_code || 200,
             headers: {
               'Content-Type': sfData.result.content_type || 'application/json',
               'Access-Control-Allow-Origin': '*',
-              'Cache-Control': 'public, max-age=86400',
+              'Cache-Control': policy.type === 'FOREVER' ? 'public, max-age=31536000, immutable' : 'public, max-age=3600',
               'X-Proxy-Provider': 'scrapfly'
             }
           });
@@ -142,12 +189,8 @@ export async function onRequest(context) {
 
     // Direct response handling
     const responseBody = await res.text();
-    if (res.ok && r2Key && context.env?.R2_CACHE && request.method === 'GET') {
-      context.waitUntil(
-        context.env.R2_CACHE.put(r2Key, responseBody, {
-          httpMetadata: { contentType: 'application/json' }
-        })
-      );
+    if (res.ok && request.method === 'GET') {
+      saveToR2(responseBody);
     }
 
     const responseHeaders = new Headers(res.headers);

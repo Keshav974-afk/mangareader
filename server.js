@@ -30,23 +30,51 @@ const R2_CONFIG = {
   secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || ''
 };
 
-function getR2Key(pathname, query) {
+// Smart Tiered Cache Policies:
+// 1. FOREVER: Published chapter content (Chapter 321 pages/text NEVER change once published)
+// 2. TEMPORARY: Series info (1 hour) & Chapter lists (2 hours, so new chapters appear as released)
+// 3. NO_R2: Home feeds, search results (RAM only, 10 min TTL)
+function getCachePolicy(pathname, query) {
   const clean = pathname.replace(/^\/api\//, '').replace(/^\//, '');
-  if (clean === 'manga/page') {
-    const id = new URLSearchParams(query).get('id');
-    return id ? `manga/page/${id}.json` : null;
-  }
-  if (clean === 'manga/allChapters') {
-    const mangaId = new URLSearchParams(query).get('mangaId');
-    return mangaId ? `manga/allChapters/${mangaId}.json` : null;
-  }
+
+  // A. FOREVER CACHE (Immutable chapter content)
   if (clean === 'read/chapter') {
     const p = new URLSearchParams(query);
     const m = p.get('mangaId');
     const c = p.get('chapterId');
-    return (m && c) ? `read/chapter/${m}_${c}.json` : null;
+    if (m && c) {
+      return { type: 'FOREVER', key: `read/chapter/${m}_${c}.json`, maxAge: 31536000, ttlMs: Infinity };
+    }
   }
-  return null;
+
+  if (clean === 'read/novelChapter') {
+    const p = new URLSearchParams(query);
+    const m = p.get('mangaId');
+    const c = p.get('chapterId');
+    if (m && c) {
+      return { type: 'FOREVER', key: `read/novelChapter/${m}_${c}.json`, maxAge: 31536000, ttlMs: Infinity };
+    }
+  }
+
+  // B. TEMPORARY CACHE (Series metadata & chapters list)
+  if (clean === 'manga/allChapters') {
+    const mangaId = new URLSearchParams(query).get('mangaId');
+    if (mangaId) {
+      // 2 hours TTL so newly released chapters show up
+      return { type: 'TEMPORARY', key: `manga/allChapters/${mangaId}.json`, maxAge: 7200, ttlMs: 2 * 60 * 60 * 1000 };
+    }
+  }
+
+  if (clean === 'manga/page') {
+    const id = new URLSearchParams(query).get('id');
+    if (id) {
+      // 1 hour TTL
+      return { type: 'TEMPORARY', key: `manga/page/${id}.json`, maxAge: 3600, ttlMs: 60 * 60 * 1000 };
+    }
+  }
+
+  // C. NO R2 (Home feeds, search - ephemeral)
+  return { type: 'NO_R2', key: null, maxAge: 600, ttlMs: 10 * 60 * 1000 };
 }
 
 // Upload buffer/string to Cloudflare R2 bucket using AWS Signature V4
@@ -224,7 +252,7 @@ function handleApiProxy(req, res, targetPath, parsedUrl) {
   const query = parsedUrl.search || '';
   const fullUrl = `${ATSU_API_BASE}${targetPath}${query}`;
   const cacheKey = req.method + ':' + fullUrl;
-  const r2Key = getR2Key(targetPath, query);
+  const policy = getCachePolicy(targetPath, query);
 
   function executeProxy() {
     const headers = {
@@ -261,7 +289,7 @@ function handleApiProxy(req, res, targetPath, parsedUrl) {
             res.end(sfContent);
             if (sfStatus === 200) {
               setCache(cacheKey, sfContent);
-              if (r2Key) uploadToR2(r2Key, sfContent, sfContentType);
+              if (policy.key) uploadToR2(policy.key, sfContent, sfContentType);
             }
           });
           return;
@@ -278,7 +306,7 @@ function handleApiProxy(req, res, targetPath, parsedUrl) {
         if (proxyRes.statusCode === 200 && req.method === 'GET' && responseBuffer.length > 0) {
           const str = responseBuffer.toString('utf-8');
           setCache(cacheKey, str);
-          if (r2Key) uploadToR2(r2Key, str, contentType);
+          if (policy.key) uploadToR2(policy.key, str, contentType);
         }
       });
     });
@@ -297,7 +325,7 @@ function handleApiProxy(req, res, targetPath, parsedUrl) {
             res.end(sfContent);
             if (sfStatus === 200) {
               setCache(cacheKey, sfContent);
-              if (r2Key) uploadToR2(r2Key, sfContent, sfContentType);
+              if (policy.key) uploadToR2(policy.key, sfContent, sfContentType);
             }
             return;
           }
@@ -317,27 +345,38 @@ function handleApiProxy(req, res, targetPath, parsedUrl) {
   if (req.method === 'GET') {
     const cached = getCached(cacheKey);
     if (cached) {
-      res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'RAM-HIT', 'Access-Control-Allow-Origin': '*' });
-      res.end(cached);
-      return;
+      const age = Date.now() - cached.time;
+      if (policy.type === 'FOREVER' || age < policy.ttlMs) {
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'X-Cache': `RAM-${policy.type}-HIT`,
+          'Access-Control-Allow-Origin': '*'
+        });
+        res.end(cached.data);
+        return;
+      }
     }
 
     // 2. Cloudflare R2 Persistent Storage check
-    if (r2Key) {
-      https.get(`${R2_PUBLIC_BASE}/${r2Key}`, (r2Res) => {
+    if (policy.key) {
+      https.get(`${R2_PUBLIC_BASE}/${policy.key}`, (r2Res) => {
         if (r2Res.statusCode === 200) {
-          let r2Data = '';
-          r2Res.on('data', c => r2Data += c);
-          r2Res.on('end', () => {
-            setCache(cacheKey, r2Data);
-            res.writeHead(200, {
-              'Content-Type': 'application/json',
-              'X-Cache': 'R2-PERMANENT-HIT',
-              'Access-Control-Allow-Origin': '*'
+          const lastMod = r2Res.headers['last-modified'];
+          const age = lastMod ? Date.now() - new Date(lastMod).getTime() : 0;
+          if (policy.type === 'FOREVER' || age < policy.ttlMs) {
+            let r2Data = '';
+            r2Res.on('data', c => r2Data += c);
+            r2Res.on('end', () => {
+              setCache(cacheKey, r2Data);
+              res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'X-Cache': `R2-${policy.type}-HIT`,
+                'Access-Control-Allow-Origin': '*'
+              });
+              res.end(r2Data);
             });
-            res.end(r2Data);
-          });
-          return;
+            return;
+          }
         }
         executeProxy();
       }).on('error', () => executeProxy());
