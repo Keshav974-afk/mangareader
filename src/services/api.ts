@@ -152,20 +152,26 @@ class AtsuApiService {
   }
 
   // ---- CDN Image Helpers ----
-  // Points directly to https://cdn.atsu.moe (paired with <meta name="referrer" content="no-referrer"> to load images at max speed with 0 proxy credits)
+  // Routes via the proxy (/cdn/static/...) which tunnels through the residential proxy (vaultproxies)
+  // with automatic WordPress Photon fallback
   getImageUrl(imagePath?: string): string {
     if (!imagePath) return '';
     
     // External full URLs
     if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      if (imagePath.includes('cdn.atsu.moe/')) {
+        const pathPart = imagePath.replace(/^https?:\/\/cdn\.atsu\.moe\//, '');
+        const cleanPath = pathPart.startsWith('/') ? pathPart : '/' + pathPart;
+        const normalized = cleanPath.startsWith('/static/') ? cleanPath : `/static${cleanPath}`;
+        return `${CDN_PREFIX}${normalized}`;
+      }
       return imagePath;
     }
 
     const clean = imagePath.startsWith('/') ? imagePath : '/' + imagePath;
-    if (clean.startsWith('/static/')) {
-      return `${CDN_BASE}${clean}`;
-    }
-    return `${CDN_BASE}/static${clean}`;
+    const normalized = clean.startsWith('/static/') ? clean : `/static${clean}`;
+
+    return `${CDN_PREFIX}${normalized}`;
   }
 
   getPosterUrl(item?: any, preferredSize: 'small' | 'medium' | 'large' = 'medium'): string {

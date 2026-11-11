@@ -20,12 +20,13 @@ export const MangaCard: React.FC<MangaCardProps> = ({ item, onNavigate, width = 
   const title = item.title || item.englishTitle || 'Untitled';
 
   const handleError = () => {
-    // If .avif or small/medium fails, fallback to main .jpg image
-    if (!fallbackTried && (item.image || (item as any).poster?.image)) {
+    // If initial image fails, fallback to WordPress Photon edge
+    if (!fallbackTried) {
       setFallbackTried(true);
-      const fallbackUrl = api.getImageUrl(item.image || (item as any).poster?.image);
-      if (fallbackUrl !== imgSrc) {
-        setImgSrc(fallbackUrl);
+      const posterPath = item.image || (item as any).poster?.image || item.mediumImage || (item as any).poster?.mediumImage || '';
+      const clean = posterPath.replace(/^https?:\/\/cdn\.atsu\.moe\//, '').replace(/^\/?static\/?/, '');
+      if (clean) {
+        setImgSrc(`https://i0.wp.com/cdn.atsu.moe/static/${clean}`);
         return;
       }
     }

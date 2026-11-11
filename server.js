@@ -1,6 +1,7 @@
 // Zero-dependency Node.js server and API proxy for Atsu Reader
 import http from 'node:http';
 import https from 'node:https';
+import tls from 'node:tls';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +12,50 @@ const __dirname = path.dirname(__filename);
 const PORT = process.env.PORT || 3300;
 const ATSU_API_BASE = 'https://atsu.moe';
 const ATSU_CDN_BASE = 'https://cdn.atsu.moe';
+
+// Dedicated Residential Proxy Configuration
+const PROXY_CONFIG = {
+  host: process.env.PROXY_HOST || 'gate-us.vaultproxies.com',
+  port: parseInt(process.env.PROXY_PORT || '80', 10),
+  auth: process.env.PROXY_AUTH || '4c6169f09d00279c:62f360c1eb4c9da0'
+};
+
+// Create custom HTTPS agent that tunnels via the residential proxy
+const proxyAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 100,
+  timeout: 30000
+});
+
+proxyAgent.createConnection = function (options, callback) {
+  const req = http.request({
+    host: PROXY_CONFIG.host,
+    port: PROXY_CONFIG.port,
+    method: 'CONNECT',
+    path: `${options.host}:${options.port || 443}`,
+    headers: {
+      'Proxy-Authorization': 'Basic ' + Buffer.from(PROXY_CONFIG.auth).toString('base64'),
+      'Host': `${options.host}:${options.port || 443}`
+    }
+  });
+
+  req.on('connect', (res, socket) => {
+    if (res.statusCode !== 200) {
+      socket.destroy();
+      callback(new Error(`Proxy CONNECT failed with status: ${res.statusCode}`));
+      return;
+    }
+    const tlsSocket = tls.connect({
+      host: options.host,
+      socket: socket,
+      servername: options.servername || options.host
+    }, () => callback(null, tlsSocket));
+    tlsSocket.on('error', err => callback(err));
+  });
+
+  req.on('error', err => callback(err));
+  req.end();
+};
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -103,14 +148,15 @@ function handleApiProxy(req, res, targetPath, parsedUrl) {
   }
 
   const headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
-    'Referer': ATSU_API_BASE,
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+    'Referer': ATSU_API_BASE + '/',
     'Accept': 'application/json'
   };
 
   const proxyReq = https.request(fullUrl, {
     method: req.method,
-    headers
+    headers,
+    agent: proxyAgent
   }, (proxyRes) => {
     let chunks = [];
     proxyRes.on('data', chunk => chunks.push(chunk));
@@ -119,12 +165,12 @@ function handleApiProxy(req, res, targetPath, parsedUrl) {
       const isBlock = proxyRes.statusCode === 403 || proxyRes.statusCode === 401 || (responseBuffer.length > 0 && responseBuffer.slice(0, 100).toString().includes('<!DOCTYPE html>'));
 
       if (isBlock && req.method === 'GET') {
-        console.log(`[Proxy] Direct fetch blocked (status ${proxyRes.statusCode}) for ${targetPath}. Retrying via Scrapfly Unblocker...`);
+        console.log(`[Proxy] Upstream blocked (status ${proxyRes.statusCode}) for ${targetPath}. Retrying via Scrapfly Unblocker...`);
         fetchViaScrapfly(fullUrl, (err, sfStatus, sfContent, sfContentType) => {
           if (err) {
             console.error('[Proxy] Scrapfly fallback failed:', err.message);
             res.writeHead(502, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-            res.end(JSON.stringify({ error: 'Scrapfly proxy failed: ' + err.message }));
+            res.end(JSON.stringify({ error: 'Proxy request failed: ' + err.message }));
             return;
           }
           res.writeHead(sfStatus, {
@@ -144,7 +190,8 @@ function handleApiProxy(req, res, targetPath, parsedUrl) {
       const contentType = proxyRes.headers['content-type'] || 'application/json';
       res.writeHead(proxyRes.statusCode || 500, {
         'Content-Type': contentType,
-        'Access-Control-Allow-Origin': '*'
+        'Access-Control-Allow-Origin': '*',
+        'X-Proxy-Provider': 'vaultproxies'
       });
       res.end(responseBuffer);
       if (proxyRes.statusCode === 200 && req.method === 'GET' && responseBuffer.length > 0) {
@@ -156,7 +203,7 @@ function handleApiProxy(req, res, targetPath, parsedUrl) {
   proxyReq.on('error', (err) => {
     // On network error, try Scrapfly as fallback
     if (req.method === 'GET') {
-      console.log(`[Proxy] Network error for ${targetPath}, trying Scrapfly...`);
+      console.log(`[Proxy] Network error via vaultproxies for ${targetPath}, trying Scrapfly...`);
       fetchViaScrapfly(fullUrl, (sfErr, sfStatus, sfContent, sfContentType) => {
         if (!sfErr && sfContent) {
           res.writeHead(sfStatus, {
@@ -180,7 +227,7 @@ function handleApiProxy(req, res, targetPath, parsedUrl) {
   req.pipe(proxyReq);
 }
 
-// Proxy CDN image requests to bypass Cloudflare anti-hotlinking
+// Proxy CDN image requests using the residential proxy with Photon fallback
 function handleCdnProxy(req, res, targetPath, parsedUrl) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -196,14 +243,15 @@ function handleCdnProxy(req, res, targetPath, parsedUrl) {
   const fullUrl = `${ATSU_CDN_BASE}${targetPath}${query}`;
 
   const headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
-    'Referer': ATSU_API_BASE,
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+    'Referer': 'https://atsu.moe/',
     'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
   };
 
   const proxyReq = https.request(fullUrl, {
     method: 'GET',
-    headers
+    headers,
+    agent: proxyAgent
   }, (proxyRes) => {
     // Follow redirect if 301/302
     if ((proxyRes.statusCode === 301 || proxyRes.statusCode === 302) && proxyRes.headers.location) {
@@ -213,7 +261,15 @@ function handleCdnProxy(req, res, targetPath, parsedUrl) {
       return;
     }
 
-    res.writeHead(proxyRes.statusCode || 500, {
+    if (proxyRes.statusCode !== 200) {
+      // Fallback to WordPress Photon edge
+      const photonUrl = `https://i0.wp.com/cdn.atsu.moe${targetPath}${query}`;
+      res.writeHead(302, { 'Location': photonUrl });
+      res.end();
+      return;
+    }
+
+    res.writeHead(200, {
       'Content-Type': proxyRes.headers['content-type'] || 'image/jpeg',
       'Cache-Control': 'public, max-age=604800, immutable',
       'Access-Control-Allow-Origin': '*'
@@ -222,8 +278,8 @@ function handleCdnProxy(req, res, targetPath, parsedUrl) {
   });
 
   proxyReq.on('error', (err) => {
-    console.error('CDN proxy error for', fullUrl, err.message);
-    res.writeHead(404);
+    const photonUrl = `https://i0.wp.com/cdn.atsu.moe${targetPath}${query}`;
+    res.writeHead(302, { 'Location': photonUrl });
     res.end();
   });
 
