@@ -10,11 +10,13 @@ import {
   Scroll,
   X,
   Loader2,
-  Settings
+  Settings,
+  Download
 } from 'lucide-react';
 import { Chapter, MangaPageInfo, Page } from '../types/atsu';
 import { api } from '../services/api';
 import { useReadingHistory } from '../hooks/useReadingHistory';
+import { MangaDownloadModal } from './MangaDownloadModal';
 
 interface MangaReaderProps {
   mangaId: string;
@@ -44,6 +46,7 @@ export const MangaReader: React.FC<MangaReaderProps> = ({
   const [controlsVisible, setControlsVisible] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [downloadModalOpen, setDownloadModalOpen] = useState(false);
 
   // Touch swipe coordinates for Side Reader
   const touchStartXRef = useRef<number>(0);
@@ -342,6 +345,16 @@ export const MangaReader: React.FC<MangaReaderProps> = ({
               </button>
             </div>
 
+            {/* Download Chapter (PDF & CBZ) */}
+            <button
+              onClick={() => setDownloadModalOpen(true)}
+              className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-gray-300 hover:text-white transition active:scale-95"
+              title="Download Chapter (PDF & CBZ)"
+              aria-label="Download Chapter in PDF or CBZ format"
+            >
+              <Download className="w-4.5 h-4.5" />
+            </button>
+
             {/* Chapters Drawer */}
             <button
               onClick={() => setDrawerOpen(true)}
@@ -576,7 +589,22 @@ export const MangaReader: React.FC<MangaReaderProps> = ({
                     }`}
                   >
                     <span className="truncate pr-2">{ch.title || `Chapter ${ch.number}`}</span>
-                    <span className="text-xs text-gray-500 shrink-0">Ch. {ch.number}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs text-gray-500">Ch. {ch.number}</span>
+                      {isActive && (
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDrawerOpen(false);
+                            setDownloadModalOpen(true);
+                          }}
+                          className="p-1 rounded-lg bg-brand-500/30 hover:bg-brand-500/60 text-brand-300 hover:text-white transition"
+                          title="Download this chapter (PDF / CBZ)"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </span>
+                      )}
+                    </div>
                   </button>
                 );
               })}
@@ -584,6 +612,15 @@ export const MangaReader: React.FC<MangaReaderProps> = ({
           </div>
         </div>
       )}
+
+      {/* Offline Chapter Download Modal (PDF & CBZ) */}
+      <MangaDownloadModal
+        isOpen={downloadModalOpen}
+        onClose={() => setDownloadModalOpen(false)}
+        pages={pages}
+        chapter={currentChapter}
+        seriesTitle={mangaInfo?.title || 'Manga'}
+      />
 
     </div>
   );
