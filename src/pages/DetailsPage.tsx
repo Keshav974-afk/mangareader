@@ -38,14 +38,15 @@ export const DetailsPage: React.FC<DetailsPageProps> = ({ mangaId, onNavigate })
     let isMounted = true;
     setIsLoading(true);
 
-    Promise.all([
-      api.getMangaInfo(mangaId),
-      api.getAllChapters(mangaId).catch(() => [])
-    ])
-      .then(([mangaInfo, chs]) => {
+    // 1. Fetch metadata first and render details immediately without waiting
+    api.getMangaInfo(mangaId)
+      .then(mangaInfo => {
         if (!isMounted) return;
         setInfo(mangaInfo);
-        setChapters(chs || []);
+        // Pre-fill initial chapters from mangaPage if available
+        if (mangaInfo && Array.isArray((mangaInfo as any).chapters) && (mangaInfo as any).chapters.length > 0) {
+          setChapters((mangaInfo as any).chapters);
+        }
         setIsLoading(false);
         window.scrollTo({ top: 0, behavior: 'smooth' });
       })
@@ -54,14 +55,54 @@ export const DetailsPage: React.FC<DetailsPageProps> = ({ mangaId, onNavigate })
         setIsLoading(false);
       });
 
+    // 2. Fetch full chapter list in background in parallel
+    api.getAllChapters(mangaId)
+      .then(chs => {
+        if (!isMounted || !chs || chs.length === 0) return;
+        setChapters(chs);
+      })
+      .catch(err => {
+        console.warn('Could not load full chapter list:', err);
+      });
+
     return () => { isMounted = false; };
   }, [mangaId]);
 
   if (isLoading) {
     return (
-      <div className="py-24 flex flex-col items-center justify-center text-white">
-        <Loader2 className="w-10 h-10 text-brand-400 animate-spin mb-4" />
-        <p className="text-sm font-semibold text-gray-300">Loading series details...</p>
+      <div className="animate-pulse space-y-6 max-w-6xl mx-auto">
+        {/* Banner Skeleton */}
+        <div className="relative h-60 sm:h-80 md:h-96 w-full bg-carbon-850 rounded-3xl overflow-hidden border border-white/5">
+          <div className="absolute inset-0 bg-gradient-to-t from-carbon-950 via-carbon-950/40 to-transparent" />
+        </div>
+
+        {/* Content Skeleton */}
+        <div className="relative -mt-28 sm:-mt-36 z-10 px-4 sm:px-8">
+          <div className="flex flex-col md:flex-row gap-8 items-start">
+            {/* Poster Skeleton */}
+            <div className="w-44 sm:w-56 md:w-64 aspect-[2/3] rounded-2xl bg-carbon-800 border border-white/10 shrink-0 shadow-2xl" />
+
+            {/* Info Skeleton */}
+            <div className="flex-1 space-y-4 w-full pt-4">
+              <div className="h-8 sm:h-10 bg-carbon-800 rounded-xl w-3/4" />
+              <div className="h-5 bg-carbon-800/70 rounded-lg w-1/2" />
+              <div className="flex gap-2">
+                <div className="h-7 w-20 bg-carbon-800 rounded-lg" />
+                <div className="h-7 w-20 bg-carbon-800 rounded-lg" />
+                <div className="h-7 w-20 bg-carbon-800 rounded-lg" />
+              </div>
+              <div className="space-y-2 pt-2">
+                <div className="h-4 bg-carbon-800/80 rounded w-full" />
+                <div className="h-4 bg-carbon-800/80 rounded w-5/6" />
+                <div className="h-4 bg-carbon-800/80 rounded w-4/6" />
+              </div>
+              <div className="flex gap-4 pt-4">
+                <div className="h-12 w-44 bg-carbon-800 rounded-xl" />
+                <div className="h-12 w-32 bg-carbon-800 rounded-xl" />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

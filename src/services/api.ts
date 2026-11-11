@@ -119,7 +119,7 @@ class AtsuApiService {
   async getMangaInfo(mangaId: string): Promise<MangaPageInfo> {
     const res = await this.fetchJson<{ mangaPage: MangaPageInfo }>(
       `/manga/page?id=${encodeURIComponent(mangaId)}`,
-      120000
+      600000
     );
     return res.mangaPage || (res as any);
   }
@@ -128,7 +128,7 @@ class AtsuApiService {
   async getAllChapters(mangaId: string): Promise<Chapter[]> {
     const res = await this.fetchJson<{ chapters: Chapter[] }>(
       `/manga/allChapters?mangaId=${encodeURIComponent(mangaId)}`,
-      60000
+      600000
     );
     return res.chapters || [];
   }
@@ -137,7 +137,7 @@ class AtsuApiService {
   async getChapterPages(mangaId: string, chapterId: string): Promise<ReadChapterData> {
     const res = await this.fetchJson<{ readChapter: ReadChapterData }>(
       `/read/chapter?mangaId=${encodeURIComponent(mangaId)}&chapterId=${encodeURIComponent(chapterId)}`,
-      300000
+      600000
     );
     return res.readChapter;
   }
