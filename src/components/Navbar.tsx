@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Search, Bookmark, Compass, Flame, BookText, Library, Download } from 'lucide-react';
+import { BookOpen, Search, Bookmark, Compass, Flame, BookText, Library, Download, Sparkles } from 'lucide-react';
 
 interface NavbarProps {
   activeTab: string;
@@ -36,6 +36,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const desktopNavItems = [
     { id: 'home', label: 'Discover', icon: Compass, route: '#/' },
+    { id: 'latest', label: 'Latest Chapters', icon: Sparkles, route: '#/latest' },
     { id: 'comics', label: 'Manga & Manhwa', icon: Flame, route: '#/browse/comics' },
     { id: 'novels', label: 'Light Novels', icon: BookText, route: '#/browse/novels' },
     { id: 'library', label: 'Library', icon: Library, route: '#/library', badge: bookmarkCount }
@@ -43,9 +44,9 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const mobileNavItems = [
     { id: 'home', label: 'Home', icon: Compass, route: '#/' },
+    { id: 'latest', label: 'Latest', icon: Sparkles, route: '#/latest' },
     { id: 'comics', label: 'Manga', icon: Flame, route: '#/browse/comics' },
     { id: 'search', label: 'Search', icon: Search, action: onOpenSearch },
-    { id: 'novels', label: 'Novels', icon: BookText, route: '#/browse/novels' },
     { id: 'library', label: 'Library', icon: Bookmark, route: '#/library', badge: bookmarkCount }
   ];
 

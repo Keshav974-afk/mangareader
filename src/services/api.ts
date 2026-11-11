@@ -75,11 +75,12 @@ class AtsuApiService {
     );
   }
 
-  async getRecentlyUpdated(params?: { offset?: number; limit?: number }): Promise<{ items: MangaItem[] }> {
+  async getRecentlyUpdated(params?: { offset?: number; limit?: number; mediums?: string }): Promise<{ items: MangaItem[] }> {
     const offset = params?.offset ?? 0;
     const limit = params?.limit ?? 24;
+    const mediumsQuery = params?.mediums ? `&mediums=${encodeURIComponent(params.mediums)}` : '';
     return this.fetchJson<{ items: MangaItem[] }>(
-      `/home2/recentlyUpdated?offset=${offset}&limit=${limit}`,
+      `/home2/recentlyUpdated?offset=${offset}&limit=${limit}${mediumsQuery}`,
       60000
     );
   }

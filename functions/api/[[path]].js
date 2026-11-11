@@ -91,9 +91,10 @@ function getCachePolicy(pathname, search) {
     const p = new URLSearchParams(queryStr);
     const off = p.get('offset') || '0';
     const lim = p.get('limit') || '24';
+    const med = (p.get('mediums') || 'all').replace(/[^a-zA-Z0-9]/g, '_');
     return {
       type: 'TEMPORARY',
-      key: `home2/recentlyUpdated/${off}_${lim}.json`,
+      key: `home2/recentlyUpdated/${off}_${lim}_${med}.json`,
       maxAge: 600,
       ttlMs: 10 * 60 * 1000
     };

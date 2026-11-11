@@ -73,6 +73,10 @@ export const App: React.FC = () => {
       return <LibraryPage onNavigate={navigate} />;
     }
 
+    if (route.startsWith('#/latest') || route.startsWith('#/browse/latest')) {
+      return <BrowsePage category="latest" onNavigate={navigate} />;
+    }
+
     if (route.startsWith('#/browse/')) {
       const category = route.replace('#/browse/', '');
       return <BrowsePage category={category} onNavigate={navigate} />;
@@ -82,6 +86,7 @@ export const App: React.FC = () => {
   };
 
   const getActiveTab = () => {
+    if (route.includes('/latest')) return 'latest';
     if (route.includes('/library')) return 'library';
     if (route.includes('/comics')) return 'comics';
     if (route.includes('/novels')) return 'novels';

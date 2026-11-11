@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Filter, Search, Loader2, ArrowDown } from 'lucide-react';
+import { Filter, Search, Loader2, ArrowDown, Sparkles, Clock, Flame } from 'lucide-react';
 import { MangaItem, MediumType } from '../types/atsu';
 import { api } from '../services/api';
 import { MangaCard } from '../components/MangaCard';
@@ -29,7 +29,14 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({ category, onNavigate }) 
       let resItems: MangaItem[] = [];
       const limit = 24;
 
-      if (category === 'novels') {
+      if (category === 'latest' || category === 'recent') {
+        const res = await api.getRecentlyUpdated({ 
+          offset: offsetToFetch, 
+          limit, 
+          mediums: filterMedium === 'all' ? undefined : filterMedium 
+        });
+        resItems = res.items || [];
+      } else if (category === 'novels') {
         const res = await api.getPopular({ timeframe: 'daily', offset: offsetToFetch, limit, mediums: 'Novel' });
         resItems = res.items || [];
       } else if (category === 'comics') {
@@ -37,9 +44,6 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({ category, onNavigate }) 
         resItems = res.items || [];
       } else if (category === 'hot') {
         const res = await api.getHotUpdates({ offset: offsetToFetch, limit });
-        resItems = res.items || [];
-      } else if (category === 'recent') {
-        const res = await api.getRecentlyUpdated({ offset: offsetToFetch, limit });
         resItems = res.items || [];
       } else {
         // Trending or all
@@ -72,15 +76,27 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({ category, onNavigate }) 
     setHasMore(true);
     fetchBatch(0, true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [category]);
+  }, [category, filterMedium]);
 
   const getTitle = () => {
     switch (category) {
+      case 'latest': return 'Latest Chapter Releases';
       case 'novels': return 'Popular Light Novels & Web Novels';
       case 'comics': return 'Top Manga, Manhwa & Comics';
       case 'hot': return 'Hot Chapters & New Drops';
       case 'recent': return 'Recently Updated Series';
       default: return 'Explore All Titles';
+    }
+  };
+
+  const getSubtitle = () => {
+    switch (category) {
+      case 'latest': return 'All manga & novels sorted in real-time by newest released chapter';
+      case 'novels': return 'Popular light novels and web novels from around the globe';
+      case 'comics': return 'Top-rated manga, manhwa, and comics ranked by reader popularity';
+      case 'hot': return 'Trending chapters with high reader engagement';
+      case 'recent': return 'Recently updated series and fresh chapter additions';
+      default: return 'Showing titles from Atsu catalog';
     }
   };
 
@@ -101,11 +117,17 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({ category, onNavigate }) 
       {/* Header & Filter Controls */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-2 border-b border-white/10">
         <div>
+          {category === 'latest' && (
+            <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-brand-500/15 border border-brand-500/30 text-brand-400 text-[11px] font-black uppercase tracking-wider w-fit mb-2">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Real-Time Chapter Updates</span>
+            </div>
+          )}
           <h1 className="text-xl sm:text-3xl font-black text-white tracking-tight">
             {getTitle()}
           </h1>
           <p className="text-xs sm:text-sm text-gray-400 mt-1">
-            Showing {filteredItems.length} titles from Atsu catalog
+            {getSubtitle()} ({filteredItems.length} titles loaded)
           </p>
         </div>
 

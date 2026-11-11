@@ -44,6 +44,8 @@ export interface MangaItem {
   genres?: Array<{ id: string; name: string; weight?: string }>;
   tags?: string[];
   authors?: string[] | Array<{ id: string; name: string; type?: string }>;
+  createdAt?: number;
+  updatedAt?: number;
 }
 
 export interface MangaPageInfo {

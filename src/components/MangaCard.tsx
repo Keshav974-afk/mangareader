@@ -1,7 +1,21 @@
 import React, { useState } from 'react';
-import { Star, BookOpen, BookText } from 'lucide-react';
+import { Star, BookOpen, BookText, Clock } from 'lucide-react';
 import { MangaItem } from '../types/atsu';
 import { api } from '../services/api';
+
+function formatTimeAgo(timestamp: number): string {
+  const diff = Date.now() - timestamp;
+  if (diff < 0) return 'Just now';
+  const mins = Math.floor(diff / (60 * 1000));
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
+}
 
 interface MangaCardProps {
   item: MangaItem;
@@ -79,10 +93,16 @@ export const MangaCard: React.FC<MangaCardProps> = ({ item, onNavigate, width = 
         </div>
 
         {/* Bottom Info inside poster */}
-        <div className="absolute bottom-2 inset-x-2 pointer-events-none">
+        <div className="absolute bottom-2 inset-x-2 pointer-events-none flex items-center justify-between gap-1">
           {item.chapterCount ? (
-            <span className="text-[10px] font-medium text-gray-300 bg-black/60 px-1.5 py-0.5 rounded backdrop-blur">
-              {item.chapterCount} Chapters
+            <span className="text-[10px] font-medium text-gray-300 bg-black/70 px-1.5 py-0.5 rounded backdrop-blur border border-white/5">
+              {item.chapterCount} Ch
+            </span>
+          ) : <span />}
+          {item.updatedAt ? (
+            <span className="text-[9px] font-bold text-brand-300 bg-black/80 px-1.5 py-0.5 rounded backdrop-blur border border-brand-500/30 flex items-center gap-1 shadow-sm">
+              <Clock className="w-2.5 h-2.5 text-brand-400" />
+              {formatTimeAgo(item.updatedAt)}
             </span>
           ) : null}
         </div>

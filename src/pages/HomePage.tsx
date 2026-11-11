@@ -36,7 +36,8 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const [recentlyUpdated, setRecentlyUpdated] = useState<MangaItem[]>([]);
   const [isLoadingShelves, setIsLoadingShelves] = useState(true);
 
-  // Explore grid state (with Load More)
+  // Explore grid state (with Load More and Sort)
+  const [exploreSort, setExploreSort] = useState<'latest' | 'hot' | 'popular'>('latest');
   const [exploreMedium, setExploreMedium] = useState<'All' | 'Comic' | 'Novel'>('All');
   const [exploreItems, setExploreItems] = useState<MangaItem[]>([]);
   const [exploreOffset, setExploreOffset] = useState(0);
@@ -73,21 +74,35 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
     return () => { isMounted = false; };
   }, []);
 
-  // Fetch explore grid batch with pagination
+  // Fetch explore grid batch with pagination based on sort & medium
   const fetchExploreBatch = async (offsetToFetch: number, reset = false) => {
     if (isLoadingMore) return;
     setIsLoadingMore(true);
 
     try {
-      let mediums = 'Comic,Novel';
-      if (exploreMedium === 'Comic') mediums = 'Comic';
-      if (exploreMedium === 'Novel') mediums = 'Novel';
+      const mediumsParam = exploreMedium === 'All' ? undefined : exploreMedium;
+      let res: { items: MangaItem[] };
 
-      const res = await api.getHotUpdates({
-        offset: offsetToFetch,
-        limit: 24,
-        mediums
-      });
+      if (exploreSort === 'latest') {
+        res = await api.getRecentlyUpdated({
+          offset: offsetToFetch,
+          limit: 24,
+          mediums: mediumsParam
+        });
+      } else if (exploreSort === 'popular') {
+        res = await api.getPopular({
+          timeframe: 'daily',
+          offset: offsetToFetch,
+          limit: 24,
+          mediums: mediumsParam || 'Comic,Novel'
+        });
+      } else {
+        res = await api.getHotUpdates({
+          offset: offsetToFetch,
+          limit: 24,
+          mediums: mediumsParam || 'Comic,Novel'
+        });
+      }
 
       const newItems = res.items || [];
       if (newItems.length === 0) {
@@ -111,12 +126,12 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
     }
   };
 
-  // Re-fetch explore items when medium tab changes
+  // Re-fetch explore items when sort or medium tab changes
   useEffect(() => {
     setExploreOffset(0);
     setHasMore(true);
     fetchExploreBatch(0, true);
-  }, [exploreMedium]);
+  }, [exploreMedium, exploreSort]);
 
   return (
     <div className="space-y-6 sm:space-y-8 pb-12">
@@ -264,49 +279,89 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         exploreRoute="#/browse/trending"
       />
 
-      {/* 9. Recently Added Titles Shelf */}
+      {/* 9. Recently Added & Updated Titles Shelf */}
       <MediaShelf
         id="shelf-recent"
         title="Recently Added & Updated"
-        subtitle="Fresh additions & new series cataloged in the archive"
+        subtitle="Fresh additions & new series cataloged in real-time"
         icon={Clock}
         items={recentlyUpdated}
         isLoading={isLoadingShelves}
         onNavigate={onNavigate}
-        exploreRoute="#/browse/recent"
+        exploreRoute="#/latest"
       />
 
-      {/* 10. Endless Explore Grid with "Load More" Button */}
+      {/* 10. Endless Explore Grid with Sort Tabs & Load More */}
       <section className="mt-12 sm:mt-16 pt-8 border-t border-white/10">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6 px-1">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-6 px-1">
           <div>
             <div className="flex items-center gap-2 text-brand-400 text-xs font-bold uppercase tracking-wider mb-1">
               <Layers className="w-4 h-4" />
               <span>Archive Discovery</span>
             </div>
             <h2 className="text-lg sm:text-2xl font-black text-white tracking-tight">
-              Explore More Releases
+              Explore All Titles
             </h2>
             <p className="text-xs text-gray-400 mt-0.5">
-              Continuously discover newly added chapters and titles
+              Browse manga, manhwa & light novels sorted by latest updates or popularity
             </p>
           </div>
 
-          {/* Medium Filter Pills */}
-          <div className="flex items-center gap-1.5 bg-carbon-850 p-1 rounded-xl border border-white/10 shrink-0 self-start sm:self-auto">
-            {(['All', 'Comic', 'Novel'] as const).map(m => (
+          {/* Controls: Sort Tabs + Medium Filter Pills */}
+          <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto">
+            {/* Sort Switcher Tabs */}
+            <div className="flex items-center gap-1 bg-carbon-850 p-1 rounded-xl border border-white/10">
               <button
-                key={m}
-                onClick={() => setExploreMedium(m)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  exploreMedium === m
+                onClick={() => setExploreSort('latest')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  exploreSort === 'latest'
                     ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
                     : 'text-gray-400 hover:text-white hover:bg-white/5'
                 }`}
               >
-                {m === 'All' ? 'All Releases' : m === 'Comic' ? 'Comics & Manga' : 'Light Novels'}
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Latest Chapters</span>
               </button>
-            ))}
+              <button
+                onClick={() => setExploreSort('hot')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  exploreSort === 'hot'
+                    ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Flame className="w-3.5 h-3.5" />
+                <span>Hot Updates</span>
+              </button>
+              <button
+                onClick={() => setExploreSort('popular')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  exploreSort === 'popular'
+                    ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Trophy className="w-3.5 h-3.5" />
+                <span>Popular</span>
+              </button>
+            </div>
+
+            {/* Medium Filter Pills */}
+            <div className="flex items-center gap-1 bg-carbon-850 p-1 rounded-xl border border-white/10">
+              {(['All', 'Comic', 'Novel'] as const).map(m => (
+                <button
+                  key={m}
+                  onClick={() => setExploreMedium(m)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    exploreMedium === m
+                      ? 'bg-white/15 text-white shadow-sm'
+                      : 'text-gray-400 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  {m === 'All' ? 'All' : m === 'Comic' ? 'Comics' : 'Novels'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
