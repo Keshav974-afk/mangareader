@@ -56,7 +56,7 @@ This project is 100% ready for **Cloudflare Pages** deployment with zero extra c
    - **Build output directory**: `dist`
 5. Click **Save and Deploy**!
 
-> **Edge Functions**: The `functions/` folder forwards `/api/*` and `/cdn/*` through the Railway relay. The Railway relay uses a residential proxy configured through deployment environment variables. Same-origin routes avoid browser CORS restrictions; they cannot override an access denial from Atsu.
+> **Edge Functions**: The `functions/` folder forwards `/api/*` and `/cdn/*` through a residential proxy using Cloudflare TCP sockets. Proxy credentials are configured as Cloudflare Pages secrets. Same-origin routes avoid browser CORS restrictions; they cannot override an access denial from Atsu.
 
 ### Method 2: Direct Wrangler CLI Deploy
 ```bash
@@ -121,18 +121,20 @@ Open **`http://localhost:3300`** in your browser.
 └── wrangler.toml              # Cloudflare Pages configuration
 ```
 
-## Proxy access and performance
+## Cloudflare proxy access and performance
 
-Cloudflare Pages forwards API and CDN requests through the existing Railway relay at `https://mangareader-production-b77c3f15.up.railway.app`. Override this using `ATSU_RELAY_URL` in Cloudflare Pages environment settings if needed. Vercel uses the same relay unless residential credentials are configured there.
+Cloudflare Pages connects directly to the residential proxy using `cloudflare:sockets`, sends HTTP CONNECT for Atsu, then upgrades the tunnel to TLS with Atsu hostname verification. Both `/api/*` and `/cdn/*` use this path. No Railway relay or `ATSU_RELAY_URL` is used.
 
-The Node/Railway server uses a residential HTTP CONNECT proxy when `PROXY_AUTH` is configured. Set these variables securely in Railway before redeploying:
+In **Cloudflare Pages → Settings → Variables and Secrets**, configure the production environment (and preview environment if needed):
 
-- `PROXY_HOST`: your provider's hostname (default `gate-us.vaultproxies.com`).
-- `PROXY_PORT`: your provider's port (default `80`).
-- `PROXY_AUTH`: the provider's `username:password`; enter this in Railway settings, never commit it.
+- `PROXY_HOST`: `gate-us.vaultproxies.com` (default).
+- `PROXY_PORT`: `80` (default).
+- `PROXY_AUTH`: secret containing the provider's `username:password`. Never put it in a `VITE_` variable, source file, or Git commit.
 
-Without `PROXY_AUTH`, the Node server uses direct Atsu access, which may be denied. `/api/health` reports `upstream: residential-proxy` when credentials are configured; this only confirms transport selection. Verify the catalog endpoint returns HTTP 200 with an `items` array and a chapter image loads before calling the deployment ready. The credentials formerly embedded in repository history should be replaced with fresh provider credentials.
+Redeploy Pages after saving settings. The proxy provider must accept Cloudflare TCP connections. A proxy authentication failure reports `PROXY_AUTH`; missing configuration reports `PROXY_CONFIG`. Timeouts and connection failures remain errors, never empty catalogs. Live catalog and chapter-image checks are required after deployment; local mock tests and a successful Functions bundle do not establish provider connectivity.
 
-TLS verification remains enabled. Shared transport uses a 12-second deadline, coalesces concurrent requests, caches successful discovery responses for five minutes and chapter/images for one day, and bounds RAM caching to 32 MiB / 500 entries. Failures are not cached. Reader, search and secondary pages load on demand, and homepage shelves render independently.
+The standalone Node and Vercel handlers also support `PROXY_HOST`, `PROXY_PORT`, and `PROXY_AUTH`. Without credentials they use direct Atsu access, which may be denied.
 
-Run `npm run build` and `node --test tests/*.test.js`. Deployment verification: `/api/health` on Railway, then `/api/home2/popular?timeframe=daily&offset=0&limit=1` on Railway and Cloudflare Pages.
+TLS verification remains enabled. Shared transport has a 12-second deadline, deduplicates concurrent requests, caches successful discovery responses for five minutes and chapter/images for one day, and bounds RAM caching to 32 MiB / 500 entries. Socket responses are limited to 32 MiB. Failed requests are not cached. Reader, search and secondary pages load on demand, and homepage shelves render independently.
+
+Run `npm run build`, `node --test tests/*.test.js`, and `npx wrangler pages functions build --outfile /tmp/mangareader-worker.js`. After deployment, verify `/api/home2/popular?timeframe=daily&offset=0&limit=1` returns HTTP 200 with an `items` array and a returned cover loads via `/cdn/static/…`.
