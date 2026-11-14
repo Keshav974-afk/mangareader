@@ -48,6 +48,13 @@ export interface MangaItem {
   updatedAt?: number;
 }
 
+export interface ScanlatorInfo {
+  id: string;
+  name: string;
+  score?: number;
+  uploaded?: boolean;
+}
+
 export interface MangaPageInfo {
   id: string;
   title: string;
@@ -71,6 +78,7 @@ export interface MangaPageInfo {
   recommendations?: any[];
   similarManga?: any[];
   chapters?: Chapter[];
+  scanlators?: ScanlatorInfo[];
 }
 
 export interface Chapter {

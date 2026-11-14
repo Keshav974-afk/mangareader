@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Star,
   Play,
@@ -13,7 +13,8 @@ import {
   ArrowUpDown,
   Loader2,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Layers
 } from 'lucide-react';
 import { MangaPageInfo, Chapter } from '../types/atsu';
 import { api } from '../services/api';
@@ -31,6 +32,7 @@ export const DetailsPage: React.FC<DetailsPageProps> = ({ mangaId, onNavigate })
   const [chapterSearch, setChapterSearch] = useState('');
   const [sortAsc, setSortAsc] = useState(false);
   const [synopsisExpanded, setSynopsisExpanded] = useState(false);
+  const [selectedScanlator, setSelectedScanlator] = useState<string>('dedup');
 
   const { isBookmarked, toggleBookmark, getProgress } = useReadingHistory();
 
@@ -129,20 +131,76 @@ export const DetailsPage: React.FC<DetailsPageProps> = ({ mangaId, onNavigate })
   const rating = info.avgRating ? info.avgRating.toFixed(1) : null;
   const progress = getProgress(info.id);
 
-  // Filter chapters
-  const filteredChapters = chapters
-    .filter(ch => {
-      if (!chapterSearch.trim()) return true;
+  // Build scanlator dictionary from info
+  const scanlatorMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (info?.scanlators) {
+      info.scanlators.forEach(s => map.set(s.id, s.name));
+    }
+    return map;
+  }, [info?.scanlators]);
+
+  // Identify distinct scanlators present in chapters and count their releases
+  const availableScanlators = useMemo(() => {
+    const counts = new Map<string, number>();
+    chapters.forEach(c => {
+      const gid = c.scanlationMangaId || 'default';
+      counts.set(gid, (counts.get(gid) || 0) + 1);
+    });
+
+    const list: Array<{ id: string; name: string; count: number; score?: number }> = [];
+    counts.forEach((count, id) => {
+      const name = scanlatorMap.get(id) || (id === 'default' ? 'Main Release' : `Group ${id.slice(0, 8)}`);
+      const score = info?.scanlators?.find(s => s.id === id)?.score ?? 0;
+      list.push({ id, name, count, score });
+    });
+
+    return list.sort((a, b) => b.count - a.count);
+  }, [chapters, scanlatorMap, info?.scanlators]);
+
+  const hasMultipleGroups = availableScanlators.length > 1;
+  const primaryGroupId = availableScanlators[0]?.id;
+
+  // Filter and deduplicate chapters
+  const filteredChapters = useMemo(() => {
+    let list = chapters;
+
+    if (selectedScanlator === 'dedup') {
+      // Smart deduplication: keep only one version per chapter number, prioritizing primary group / high page count / latest
+      const map = new Map<number, Chapter>();
+      const sortedCandidates = [...chapters].sort((a, b) => {
+        if (primaryGroupId) {
+          if (a.scanlationMangaId === primaryGroupId && b.scanlationMangaId !== primaryGroupId) return -1;
+          if (b.scanlationMangaId === primaryGroupId && a.scanlationMangaId !== primaryGroupId) return 1;
+        }
+        const pageDiff = (b.pageCount || 0) - (a.pageCount || 0);
+        if (pageDiff !== 0) return pageDiff;
+        return (b.createdAt || 0) - (a.createdAt || 0);
+      });
+
+      for (const ch of sortedCandidates) {
+        if (!map.has(ch.number)) {
+          map.set(ch.number, ch);
+        }
+      }
+      list = Array.from(map.values());
+    } else if (selectedScanlator !== 'all') {
+      list = chapters.filter(c => (c.scanlationMangaId || 'default') === selectedScanlator);
+    }
+
+    if (chapterSearch.trim()) {
       const q = chapterSearch.toLowerCase();
-      return (
+      list = list.filter(ch =>
         String(ch.number).includes(q) ||
         (ch.title && ch.title.toLowerCase().includes(q))
       );
-    })
-    .sort((a, b) => {
+    }
+
+    return [...list].sort((a, b) => {
       const diff = Number(a.number) - Number(b.number);
       return sortAsc ? diff : -diff;
     });
+  }, [chapters, selectedScanlator, primaryGroupId, chapterSearch, sortAsc]);
 
   const firstChapter = [...chapters].sort((a, b) => Number(a.number) - Number(b.number))[0];
   const resumeChapter = progress
@@ -302,17 +360,52 @@ export const DetailsPage: React.FC<DetailsPageProps> = ({ mangaId, onNavigate })
       <section className="bg-carbon-900 border border-white/10 rounded-2xl sm:rounded-3xl p-4 sm:p-8 shadow-xl space-y-6">
         
         {/* Chapters Header & Search */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-white/10">
           <div>
-            <h2 className="font-extrabold text-xl text-white">
-              Chapters ({chapters.length})
-            </h2>
-            <p className="text-xs text-gray-400">Select a chapter to begin reading</p>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h2 className="font-extrabold text-xl text-white">
+                Chapters ({filteredChapters.length})
+              </h2>
+              {hasMultipleGroups && selectedScanlator === 'dedup' && (
+                <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                  Clean • No Duplicates
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {hasMultipleGroups && selectedScanlator === 'dedup'
+                ? `Showing unique chapters from ${availableScanlators[0]?.name || 'primary source'}`
+                : 'Select a chapter to begin reading'}
+            </p>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            {/* Scanlation Group Filter (only if multiple translation teams exist) */}
+            {hasMultipleGroups && (
+              <div className="relative flex-1 sm:flex-initial">
+                <select
+                  value={selectedScanlator}
+                  onChange={e => setSelectedScanlator(e.target.value)}
+                  className="w-full sm:w-auto bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl pl-3 pr-8 py-2 text-xs font-medium text-gray-200 outline-none focus:border-brand-500 appearance-none cursor-pointer transition"
+                >
+                  <option value="dedup" className="bg-carbon-900 text-white">
+                    ✨ Main Version ({availableScanlators[0]?.name || 'Best'})
+                  </option>
+                  <option value="all" className="bg-carbon-900 text-white">
+                    All Releases ({chapters.length} total)
+                  </option>
+                  {availableScanlators.map(s => (
+                    <option key={s.id} value={s.id} className="bg-carbon-900 text-white">
+                      {s.name} ({s.count} chs)
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            )}
+
             {/* Search Input */}
-            <div className="relative flex-1 sm:w-64">
+            <div className="relative flex-1 sm:w-56">
               <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
@@ -339,6 +432,7 @@ export const DetailsPage: React.FC<DetailsPageProps> = ({ mangaId, onNavigate })
           {filteredChapters.length > 0 ? (
             filteredChapters.map(ch => {
               const isCurrent = progress && String(progress.chapterId) === String(ch.id);
+              const groupName = ch.scanlationMangaId ? scanlatorMap.get(ch.scanlationMangaId) : null;
               return (
                 <button
                   key={ch.id}
@@ -353,8 +447,14 @@ export const DetailsPage: React.FC<DetailsPageProps> = ({ mangaId, onNavigate })
                     <p className="text-xs sm:text-sm font-semibold truncate group-hover:text-white transition-colors">
                       {ch.title || `Chapter ${ch.number}`}
                     </p>
-                    <p className="text-[11px] text-gray-500 mt-0.5">
-                      Chapter {ch.number} {ch.pageCount ? `• ${ch.pageCount} pages` : ''}
+                    <p className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                      <span>Chapter {ch.number}</span>
+                      {ch.pageCount ? <span>• {ch.pageCount} pages</span> : null}
+                      {hasMultipleGroups && groupName && (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-white/5 border border-white/5 text-gray-400">
+                          {groupName}
+                        </span>
+                      )}
                     </p>
                   </div>
                   <Play className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 text-brand-400 shrink-0 transition-opacity" />

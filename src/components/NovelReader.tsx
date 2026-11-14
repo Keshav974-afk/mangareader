@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   ArrowLeft,
   ChevronLeft,
@@ -60,12 +60,44 @@ export const NovelReader: React.FC<NovelReaderProps> = ({
 
   const { saveProgress, getProgress } = useReadingHistory();
 
-  // Sort chapters
-  const sortedChapters = [...allChapters].sort((a, b) => Number(a.number) - Number(b.number));
-  const currentChapterIndex = sortedChapters.findIndex(c => String(c.id) === String(chapterId));
-  const currentChapter = sortedChapters[currentChapterIndex] || null;
-  const prevChapter = currentChapterIndex > 0 ? sortedChapters[currentChapterIndex - 1] : null;
-  const nextChapter = currentChapterIndex < sortedChapters.length - 1 ? sortedChapters[currentChapterIndex + 1] : null;
+  // Smart next/previous chapter resolution that avoids duplicate chapter numbers
+  const currentChapter = allChapters.find(c => String(c.id) === String(chapterId)) || null;
+  const currentNumber = currentChapter ? Number(currentChapter.number) : 0;
+  const currentGroup = currentChapter?.scanlationMangaId;
+
+  // Next distinct chapter (number > currentNumber, sorted ascending)
+  const laterChapters = allChapters
+    .filter(c => Number(c.number) > currentNumber)
+    .sort((a, b) => Number(a.number) - Number(b.number));
+  const nextNumber = laterChapters[0]?.number;
+  const nextChapter = laterChapters.find(c => c.number === nextNumber && c.scanlationMangaId === currentGroup)
+    || laterChapters.find(c => c.number === nextNumber)
+    || null;
+
+  // Previous distinct chapter (number < currentNumber, sorted descending)
+  const earlierChapters = allChapters
+    .filter(c => Number(c.number) < currentNumber)
+    .sort((a, b) => Number(b.number) - Number(a.number));
+  const prevNumber = earlierChapters[0]?.number;
+  const prevChapter = earlierChapters.find(c => c.number === prevNumber && c.scanlationMangaId === currentGroup)
+    || earlierChapters.find(c => c.number === prevNumber)
+    || null;
+
+  // Clean deduplicated list for the drawer so the drawer doesn't show duplicate chapters
+  const drawerChapters = useMemo(() => {
+    const map = new Map<number, Chapter>();
+    const sorted = [...allChapters].sort((a, b) => {
+      if (currentGroup) {
+        if (a.scanlationMangaId === currentGroup && b.scanlationMangaId !== currentGroup) return -1;
+        if (b.scanlationMangaId === currentGroup && a.scanlationMangaId !== currentGroup) return 1;
+      }
+      return 0;
+    });
+    for (const ch of sorted) {
+      if (!map.has(ch.number)) map.set(ch.number, ch);
+    }
+    return Array.from(map.values()).sort((a, b) => Number(a.number) - Number(b.number));
+  }, [allChapters, currentGroup]);
 
   // Fetch novel text
   useEffect(() => {
@@ -435,7 +467,7 @@ export const NovelReader: React.FC<NovelReaderProps> = ({
             className="w-full max-w-md bg-carbon-900 text-white h-full p-4 sm:p-6 flex flex-col shadow-2xl border-l border-white/10"
           >
             <div className="flex items-center justify-between pb-4 border-b border-white/10">
-              <h3 className="font-bold text-base text-white">All Chapters ({sortedChapters.length})</h3>
+              <h3 className="font-bold text-base text-white">All Chapters ({drawerChapters.length})</h3>
               <button
                 onClick={() => setDrawerOpen(false)}
                 className="p-1.5 text-gray-400 hover:text-white rounded-lg"
@@ -445,7 +477,7 @@ export const NovelReader: React.FC<NovelReaderProps> = ({
             </div>
 
             <div className="flex-1 overflow-y-auto no-scrollbar py-3 space-y-1">
-              {[...sortedChapters].reverse().map(ch => {
+              {[...drawerChapters].reverse().map(ch => {
                 const isActive = String(ch.id) === String(chapterId);
                 return (
                   <button
