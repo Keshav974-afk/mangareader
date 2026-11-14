@@ -34,7 +34,8 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const [novels, setNovels] = useState<MangaItem[]>([]);
   const [comics, setComics] = useState<MangaItem[]>([]);
   const [recentlyUpdated, setRecentlyUpdated] = useState<MangaItem[]>([]);
-  const [isLoadingShelves, setIsLoadingShelves] = useState(true);
+  const [shelfLoading, setShelfLoading] = useState<Record<string, boolean>>({ daily: true, weekly: true, all: true, hot: true, novels: true, comics: true, recent: true });
+  const [loadError, setLoadError] = useState('');
 
   // Explore grid state (with Load More and Sort)
   const [exploreSort, setExploreSort] = useState<'latest' | 'hot' | 'popular'>('latest');
@@ -49,27 +50,18 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   // Load all initial curated shelves
   useEffect(() => {
     let isMounted = true;
-    setIsLoadingShelves(true);
-
-    Promise.all([
-      api.getPopular({ timeframe: 'daily', limit: 20 }).catch(() => ({ items: [] })),
-      api.getPopular({ timeframe: 'weekly', limit: 20 }).catch(() => ({ items: [] })),
-      api.getPopular({ timeframe: 'all', limit: 20 }).catch(() => ({ items: [] })),
-      api.getHotUpdates({ limit: 20 }).catch(() => ({ items: [] })),
-      api.getPopularNovels(20).catch(() => ({ items: [] })),
-      api.getPopularComics(20).catch(() => ({ items: [] })),
-      api.getRecentlyUpdated({ limit: 20 }).catch(() => ({ items: [] }))
-    ]).then(([popDay, popWk, popAll, hot, nov, com, rec]) => {
-      if (!isMounted) return;
-      setPopularDaily(popDay.items || []);
-      setPopularWeekly(popWk.items || []);
-      setPopularAllTime(popAll.items || []);
-      setHotUpdates(hot.items || []);
-      setNovels(nov.items || []);
-      setComics(com.items || []);
-      setRecentlyUpdated(rec.items || []);
-      setIsLoadingShelves(false);
-    });
+    const load = async (key: string, request: Promise<{ items: MangaItem[] }>, setter: (items: MangaItem[]) => void) => {
+      try { const result = await request; if (isMounted) setter(result.items || []); }
+      catch (error) { if (isMounted) setLoadError(error instanceof Error ? error.message : 'Unable to load Atsu.'); }
+      finally { if (isMounted) setShelfLoading(prev => ({ ...prev, [key]: false })); }
+    };
+    load('daily', api.getPopular({ timeframe: 'daily', limit: 20 }), setPopularDaily);
+    load('weekly', api.getPopular({ timeframe: 'weekly', limit: 20 }), setPopularWeekly);
+    load('all', api.getPopular({ timeframe: 'all', limit: 20 }), setPopularAllTime);
+    load('hot', api.getHotUpdates({ limit: 20 }), setHotUpdates);
+    load('novels', api.getPopularNovels(20), setNovels);
+    load('comics', api.getPopularComics(20), setComics);
+    load('recent', api.getRecentlyUpdated({ limit: 20 }), setRecentlyUpdated);
 
     return () => { isMounted = false; };
   }, []);
@@ -136,6 +128,9 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   return (
     <div className="space-y-6 sm:space-y-8 pb-12">
       
+      {loadError && <div role="alert" className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100 flex items-center justify-between gap-4">
+        <span>{loadError}</span><button className="shrink-0 underline" onClick={() => window.location.reload()}>Try again</button>
+      </div>}
       {/* 1. Hero Carousel */}
       <HeroBanner
         items={popularDaily.slice(0, 6)}
@@ -214,7 +209,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         subtitle="Most read across all comics & light novels right now"
         icon={Flame}
         items={popularDaily}
-        isLoading={isLoadingShelves}
+        isLoading={shelfLoading.daily}
         onNavigate={onNavigate}
         exploreRoute="#/browse/trending"
       />
@@ -226,7 +221,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         subtitle="Top ranking series over the past 7 days"
         icon={Trophy}
         items={popularWeekly}
-        isLoading={isLoadingShelves}
+        isLoading={shelfLoading.weekly}
         onNavigate={onNavigate}
         exploreRoute="#/browse/trending"
       />
@@ -238,7 +233,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         subtitle="Fresh chapter releases from leading scanlation teams"
         icon={Sparkles}
         items={hotUpdates}
-        isLoading={isLoadingShelves}
+        isLoading={shelfLoading.hot}
         onNavigate={onNavigate}
         exploreRoute="#/browse/hot"
       />
@@ -250,7 +245,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         subtitle="Translated fantasy, cultivation, isekai & sci-fi web novels"
         icon={BookText}
         items={novels}
-        isLoading={isLoadingShelves}
+        isLoading={shelfLoading.novels}
         onNavigate={onNavigate}
         exploreRoute="#/browse/novels"
       />
@@ -262,7 +257,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         subtitle="Must-read action, fantasy, martial arts, and drama comics"
         icon={BookOpen}
         items={comics}
-        isLoading={isLoadingShelves}
+        isLoading={shelfLoading.comics}
         onNavigate={onNavigate}
         exploreRoute="#/browse/comics"
       />
@@ -274,7 +269,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         subtitle="Legendary series with millions of lifetime readers"
         icon={Crown}
         items={popularAllTime}
-        isLoading={isLoadingShelves}
+        isLoading={shelfLoading.all}
         onNavigate={onNavigate}
         exploreRoute="#/browse/trending"
       />
@@ -286,7 +281,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         subtitle="Fresh additions & new series cataloged in real-time"
         icon={Clock}
         items={recentlyUpdated}
-        isLoading={isLoadingShelves}
+        isLoading={shelfLoading.recent}
         onNavigate={onNavigate}
         exploreRoute="#/latest"
       />

@@ -56,7 +56,7 @@ This project is 100% ready for **Cloudflare Pages** deployment with zero extra c
    - **Build output directory**: `dist`
 5. Click **Save and Deploy**!
 
-> **Note on Edge Functions**: The `functions/` folder contains edge proxy functions (`/api/*` and `/cdn/*`) that bypass CORS and Cloudflare hotlink protection on images automatically!
+> **Edge Functions**: The `functions/` folder forwards `/api/*` and `/cdn/*` directly to Atsu. No residential proxy, scraper service, R2 cache, or third-party image mirror is required. Same-origin routes avoid browser CORS restrictions; they cannot override an access denial from Atsu.
 
 ### Method 2: Direct Wrangler CLI Deploy
 ```bash
@@ -120,3 +120,13 @@ Open **`http://localhost:3300`** in your browser.
 ├── vite.config.ts             # Vite configuration & dev proxy
 └── wrangler.toml              # Cloudflare Pages configuration
 ```
+
+## Direct Atsu access and performance
+
+The Node, Cloudflare Pages, and Vercel handlers use `lib/atsu.js` to request only `atsu.moe` and `cdn.atsu.moe`. No proxy credentials are needed. The browser uses same-origin `/api` and `/cdn` routes because cross-origin browser access depends on Atsu's CORS policy. The Vite development server also forwards directly to Atsu.
+
+Production handlers use a 12-second upstream deadline, share concurrent identical requests, and bound successful response caching to 32 MiB / 500 entries. Discovery responses cache for five minutes; chapter and image responses for one day. Failed requests are never cached or retried automatically. Atsu 403 responses remain failures with an explanatory message; network failures return 502. Allow outbound HTTPS to `atsu.moe` and `cdn.atsu.moe`. If Atsu denies the deployment IP, direct access remains unavailable; this application does not bypass that restriction.
+
+Reader, search, and secondary routes load on demand. Homepage shelves render independently, covers decode asynchronously, and browser requests share in-flight work. The service worker leaves API freshness to the API client and HTTP cache.
+
+Validate with `npm run build` and `node --test tests/atsu.test.js`. After `npm run server`, verify `/api/health`, `/`, and `/api/home2/popular?timeframe=daily&offset=0&limit=1`. The health endpoint checks the server only; live catalog readiness requires HTTP 200 with an `items` array from the catalog endpoint.

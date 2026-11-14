@@ -25,7 +25,6 @@ interface MangaCardProps {
 
 export const MangaCard: React.FC<MangaCardProps> = ({ item, onNavigate, width = 'w-36 sm:w-44 md:w-48' }) => {
   const [imgError, setImgError] = useState(false);
-  const [fallbackTried, setFallbackTried] = useState(false);
   const initialUrl = api.getPosterUrl(item, 'medium');
   const [imgSrc, setImgSrc] = useState(initialUrl);
 
@@ -33,19 +32,7 @@ export const MangaCard: React.FC<MangaCardProps> = ({ item, onNavigate, width = 
   const rating = item.mbRating ? item.mbRating.toFixed(1) : null;
   const title = item.title || item.englishTitle || 'Untitled';
 
-  const handleError = () => {
-    // If initial image fails, fallback to WordPress Photon edge
-    if (!fallbackTried) {
-      setFallbackTried(true);
-      const posterPath = item.image || (item as any).poster?.image || item.mediumImage || (item as any).poster?.mediumImage || '';
-      const clean = posterPath.replace(/^https?:\/\/cdn\.atsu\.moe\//, '').replace(/^\/?static\/?/, '');
-      if (clean) {
-        setImgSrc(`https://i0.wp.com/cdn.atsu.moe/static/${clean}`);
-        return;
-      }
-    }
-    setImgError(true);
-  };
+  const handleError = () => setImgError(true);
 
   return (
     <div
@@ -64,6 +51,7 @@ export const MangaCard: React.FC<MangaCardProps> = ({ item, onNavigate, width = 
             src={imgSrc}
             alt={title}
             loading="lazy"
+            decoding="async"
             onError={handleError}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           />

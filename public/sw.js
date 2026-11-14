@@ -1,5 +1,5 @@
 // Voidflix Manga PWA Service Worker - 24-Hour Cache Policy
-const CACHE_NAME = 'voidflix-manga-v2';
+const CACHE_NAME = 'voidflix-manga-v3';
 const ONE_DAY_MS = 24 * 60 * 60 * 1000; // 24 hours (1 day)
 
 const PRECACHE_URLS = [
@@ -53,6 +53,9 @@ self.addEventListener('fetch', (event) => {
 
   // Skip non-GET requests
   if (event.request.method !== 'GET') return;
+
+  // Let the API client and HTTP cache control freshness and error handling.
+  if (url.pathname.startsWith('/api/')) return;
 
   // 1. API & CDN Requests -> Cache First with 1-Day Freshness + Background Revalidation
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/cdn/')) {

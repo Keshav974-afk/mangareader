@@ -20,6 +20,7 @@ const CDN_PREFIX = API_PROXY_URL ? `${API_PROXY_URL}/cdn` : '/cdn';
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 class AtsuApiService {
+  private pending = new Map<string, Promise<any>>();
   private memoryCache = new Map<string, { time: number; data: any }>();
   private cacheTtl = ONE_DAY_MS;
 
@@ -54,6 +55,7 @@ class AtsuApiService {
 
   private setCachedData(key: string, data: any): void {
     const entry = { time: Date.now(), data };
+    if (this.memoryCache.size >= 200) this.memoryCache.delete(this.memoryCache.keys().next().value);
     this.memoryCache.set(key, entry);
 
     if (typeof localStorage !== 'undefined') {
@@ -73,7 +75,16 @@ class AtsuApiService {
     }
   }
 
-  private async fetchJson<T>(endpoint: string, cacheDuration = ONE_DAY_MS): Promise<T> {
+  private fetchJson<T>(endpoint: string, cacheDuration = 5 * 60 * 1000): Promise<T> {
+    const existing = this.pending.get(endpoint);
+    if (existing) return existing;
+    const request = this.fetchUnshared<T>(endpoint, Math.min(cacheDuration, endpoint.startsWith('/read/') ? ONE_DAY_MS : 5 * 60 * 1000))
+      .finally(() => this.pending.delete(endpoint));
+    this.pending.set(endpoint, request);
+    return request;
+  }
+
+  private async fetchUnshared<T>(endpoint: string, cacheDuration: number): Promise<T> {
     const fullUrl = `${API_BASE}${endpoint}`;
 
     if (cacheDuration > 0) {
@@ -85,14 +96,14 @@ class AtsuApiService {
 
     try {
       const res = await fetch(fullUrl, {
+        signal: AbortSignal.timeout(15000),
         headers: {
           Accept: 'application/json'
         }
       });
 
       if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(`API error ${res.status}: ${text.slice(0, 100)}`);
+        throw new Error(res.status === 403 ? 'Atsu denied access from this server. Please try again later.' : `Unable to load from Atsu (HTTP ${res.status}). Please try again.`);
       }
 
       const data = await res.json();
@@ -212,8 +223,7 @@ class AtsuApiService {
   }
 
   // ---- CDN Image Helpers ----
-  // Routes via the proxy (/cdn/static/...) which tunnels through the residential proxy (vaultproxies)
-  // with automatic WordPress Photon fallback
+  // Same-origin CDN route fetches directly from Atsu.
   getImageUrl(imagePath?: string): string {
     if (!imagePath) return '';
     
