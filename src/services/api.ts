@@ -55,7 +55,6 @@ class AtsuApiService {
 
   private setCachedData(key: string, data: any): void {
     const entry = { time: Date.now(), data };
-    if (this.memoryCache.size >= 200) this.memoryCache.delete(this.memoryCache.keys().next().value);
     this.memoryCache.set(key, entry);
 
     if (typeof localStorage !== 'undefined') {
@@ -75,16 +74,7 @@ class AtsuApiService {
     }
   }
 
-  private fetchJson<T>(endpoint: string, cacheDuration = 5 * 60 * 1000): Promise<T> {
-    const existing = this.pending.get(endpoint);
-    if (existing) return existing;
-    const request = this.fetchUnshared<T>(endpoint, Math.min(cacheDuration, endpoint.startsWith('/read/') ? ONE_DAY_MS : 5 * 60 * 1000))
-      .finally(() => this.pending.delete(endpoint));
-    this.pending.set(endpoint, request);
-    return request;
-  }
-
-  private async fetchUnshared<T>(endpoint: string, cacheDuration: number): Promise<T> {
+  private async fetchJson<T>(endpoint: string, cacheDuration = ONE_DAY_MS): Promise<T> {
     const fullUrl = `${API_BASE}${endpoint}`;
 
     if (cacheDuration > 0) {
@@ -94,35 +84,44 @@ class AtsuApiService {
       }
     }
 
-    try {
-      const res = await fetch(fullUrl, {
-        signal: AbortSignal.timeout(15000),
-        headers: {
-          Accept: 'application/json'
-        }
-      });
-
-      if (!res.ok) {
-        const detail = await res.json().catch(() => null);
-        if (typeof detail?.error === 'string') throw new Error(detail.error + (detail.code ? ` (${detail.code})` : ''));
-        throw new Error(res.status === 403 ? 'Atsu denied access from this server. Please try again later.' : `Unable to load from Atsu (HTTP ${res.status}). Please try again.`);
-      }
-
-      const data = await res.json();
-      if (cacheDuration > 0) {
-        this.setCachedData(fullUrl, data);
-      }
-      return data as T;
-    } catch (err: any) {
-      // If network fails, try stale cache before failing
-      const stale = this.getCachedData<T>(fullUrl, Infinity);
-      if (stale !== null) {
-        console.warn(`[API] Network failed for ${endpoint}, using stale 1-day cache`);
-        return stale;
-      }
-      console.error(`Request to ${endpoint} failed:`, err);
-      throw err;
+    if (this.pending.has(fullUrl)) {
+      return this.pending.get(fullUrl)! as Promise<T>;
     }
+
+    const promise = (async () => {
+      try {
+        const res = await fetch(fullUrl, {
+          headers: {
+            Accept: 'application/json'
+          }
+        });
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          throw new Error(`API error ${res.status}: ${text.slice(0, 100)}`);
+        }
+
+        const data = await res.json();
+        if (cacheDuration > 0) {
+          this.setCachedData(fullUrl, data);
+        }
+        return data as T;
+      } catch (err: any) {
+        // If network fails, try stale cache before failing
+        const stale = this.getCachedData<T>(fullUrl, Infinity);
+        if (stale !== null) {
+          console.warn(`[API] Network failed for ${endpoint}, using stale 1-day cache`);
+          return stale;
+        }
+        console.error(`Request to ${endpoint} failed:`, err);
+        throw err;
+      } finally {
+        this.pending.delete(fullUrl);
+      }
+    })();
+
+    this.pending.set(fullUrl, promise);
+    return promise;
   }
 
   // ---- Home / Popular / Updates (Cached 1 Day) ----
@@ -225,7 +224,8 @@ class AtsuApiService {
   }
 
   // ---- CDN Image Helpers ----
-  // Same-origin CDN route fetches directly from Atsu.
+  // Routes via the proxy (/cdn/static/...) which tunnels through the residential proxy (vaultproxies)
+  // with automatic WordPress Photon fallback
   getImageUrl(imagePath?: string): string {
     if (!imagePath) return '';
     

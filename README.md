@@ -56,7 +56,7 @@ This project is 100% ready for **Cloudflare Pages** deployment with zero extra c
    - **Build output directory**: `dist`
 5. Click **Save and Deploy**!
 
-> **Edge Functions**: The `functions/` folder forwards `/api/*` and `/cdn/*` through a residential proxy using Cloudflare TCP sockets. Proxy credentials are configured as Cloudflare Pages secrets. Same-origin routes avoid browser CORS restrictions; they cannot override an access denial from Atsu.
+> **Note on Edge Functions**: The `functions/` folder contains edge proxy functions (`/api/*` and `/cdn/*`) that bypass CORS and Cloudflare hotlink protection on images automatically!
 
 ### Method 2: Direct Wrangler CLI Deploy
 ```bash
@@ -120,21 +120,3 @@ Open **`http://localhost:3300`** in your browser.
 ├── vite.config.ts             # Vite configuration & dev proxy
 └── wrangler.toml              # Cloudflare Pages configuration
 ```
-
-## Cloudflare proxy access and performance
-
-Cloudflare Pages connects directly to the residential proxy using `cloudflare:sockets`, sends HTTP CONNECT for Atsu, then upgrades the tunnel to TLS with Atsu hostname verification. Both `/api/*` and `/cdn/*` use this path. No Railway relay or `ATSU_RELAY_URL` is used.
-
-In **Cloudflare Pages → Settings → Variables and Secrets**, configure the production environment (and preview environment if needed):
-
-- `PROXY_HOST`: `gate-us.vaultproxies.com` (default).
-- `PROXY_PORT`: `80` (default).
-- `PROXY_AUTH`: secret containing the provider's `username:password`. Never put it in a `VITE_` variable, source file, or Git commit.
-
-Redeploy Pages after saving settings. The proxy provider must accept Cloudflare TCP connections. A proxy authentication failure reports `PROXY_AUTH`; missing configuration reports `PROXY_CONFIG`. Timeouts and connection failures remain errors, never empty catalogs. Live catalog and chapter-image checks are required after deployment; local mock tests and a successful Functions bundle do not establish provider connectivity.
-
-The standalone Node and Vercel handlers also support `PROXY_HOST`, `PROXY_PORT`, and `PROXY_AUTH`. Without credentials they use direct Atsu access, which may be denied.
-
-TLS verification remains enabled. Shared transport has a 12-second deadline, deduplicates concurrent requests, caches successful discovery responses for five minutes and chapter/images for one day, and bounds RAM caching to 32 MiB / 500 entries. Socket responses are limited to 32 MiB. Failed requests are not cached. Reader, search and secondary pages load on demand, and homepage shelves render independently.
-
-Run `npm run build`, `node --test tests/*.test.js`, and `npx wrangler pages functions build --outfile /tmp/mangareader-worker.js`. After deployment, verify `/api/home2/popular?timeframe=daily&offset=0&limit=1` returns HTTP 200 with an `items` array and a returned cover loads via `/cdn/static/…`.

@@ -1,12 +1,12 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Navbar } from './components/Navbar';
-const SearchModal = lazy(() => import('./components/SearchModal').then(m => ({ default: m.SearchModal })));
+import { SearchModal } from './components/SearchModal';
 import { HomePage } from './pages/HomePage';
-const DetailsPage = lazy(() => import('./pages/DetailsPage').then(m => ({ default: m.DetailsPage })));
-const ReaderPage = lazy(() => import('./pages/ReaderPage').then(m => ({ default: m.ReaderPage })));
-const BrowsePage = lazy(() => import('./pages/BrowsePage').then(m => ({ default: m.BrowsePage })));
-const LibraryPage = lazy(() => import('./pages/LibraryPage').then(m => ({ default: m.LibraryPage })));
+import { DetailsPage } from './pages/DetailsPage';
+import { ReaderPage } from './pages/ReaderPage';
+import { BrowsePage } from './pages/BrowsePage';
+import { LibraryPage } from './pages/LibraryPage';
 import { useReadingHistory } from './hooks/useReadingHistory';
 import { BookOpen, Heart, Sparkles } from 'lucide-react';
 
@@ -109,15 +109,15 @@ export const App: React.FC = () => {
 
         {/* Main Content Area */}
         <div className={`flex-1 ${!isReader ? 'max-w-7xl mx-auto w-full px-3 sm:px-6 pt-4 sm:pt-6 pb-20 md:pb-10' : ''}`}>
-          <Suspense fallback={<div role="status" className="py-20 text-center text-gray-400">Loading…</div>}>{renderCurrentView()}</Suspense>
+          {renderCurrentView()}
         </div>
 
         {/* Global Search Modal */}
-        {searchOpen && <Suspense fallback={null}><SearchModal
+        <SearchModal
           isOpen={searchOpen}
           onClose={() => setSearchOpen(false)}
           onNavigate={navigate}
-        /></Suspense>}
+        />
 
         {/* Global Footer (only visible when not in reader) */}
         {!isReader && (
