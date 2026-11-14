@@ -29,7 +29,7 @@ test('Cloudflare connects to proxy, upgrades TLS for Atsu, and returns JSON', as
 });
 
 test('Cloudflare rejects missing credentials and proxy authentication failures', async () => {
-  await assert.rejects(createCloudflareProxyFetcher({}, () => {})('https://atsu.moe/api/test'), { code: 'PROXY_CONFIG' });
+  await assert.rejects(createCloudflareProxyFetcher({}, () => {})('https://atsu.moe/api/test'), { code: 'PROXY_AUTH_MISSING' });
   const fetcher = createCloudflareProxyFetcher({ PROXY_AUTH: 'wrong:value' }, () => socket(['HTTP/1.1 407 Proxy Authentication Required\r\n\r\n'], []));
   await assert.rejects(fetcher('https://atsu.moe/api/test'), { code: 'PROXY_AUTH' });
 });
@@ -47,4 +47,16 @@ test('binary image bytes survive HTTP framing', async () => {
   const response = await decodeHttpResponse(bytes);
   assert.equal(response.headers.get('content-type'), 'image/avif');
   assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [0, 255, 128, 13]);
+});
+
+
+test('health identifies the Pages handler and reports presence without exposing secrets', async () => {
+  const { handleCloudflareRequest } = await import('../lib/cloudflare-handler.js');
+  const response = await handleCloudflareRequest({ request: new Request('https://example.com/api/health'),
+    env: { PROXY_AUTH: 'private:secret', PROXY_PORT: 'http://invalid' } }, () => { throw new Error('Health must not connect'); });
+  const body = await response.text();
+  assert.doesNotMatch(body, /private|secret|http:\/\/invalid/);
+  assert.equal(JSON.parse(body).credentialPresent, true);
+  assert.equal(JSON.parse(body).proxyPortValid, false);
+  assert.equal(response.headers.get('X-Voidflix-Transport'), 'cloudflare-tcp-v1');
 });
