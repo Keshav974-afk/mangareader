@@ -46,3 +46,32 @@ test('CDN stays on Atsu even for a double slash path and preserves query', async
   assert.equal(response.headers.get('content-type'), 'image/jpeg');
   assert.equal(await response.text(), 'image');
 });
+
+test('follows first-party HTTPS redirects', async () => {
+  let calls = 0;
+  const response = await atsuRequest(new URL('http://localhost/api/test/redirect'), async url => {
+    if (++calls === 1) return new Response(null, { status: 302, headers: { Location: '/api/test/destination' } });
+    assert.equal(url.href, 'https://atsu.moe/api/test/destination');
+    return Response.json({ items: [] });
+  });
+  assert.equal(response.status, 200);
+  assert.equal(calls, 2);
+});
+
+test('rejects redirects to unrelated servers', async () => {
+  let calls = 0;
+  const response = await atsuRequest(new URL('http://localhost/api/test/unsafe'), async () => {
+    calls++;
+    return new Response(null, { status: 302, headers: { Location: 'https://example.com' } });
+  });
+  assert.equal((await response.json()).code, 'UPSTREAM_REDIRECT');
+  assert.equal(calls, 1);
+});
+
+test('DNS failure is distinguishable from an Atsu access denial', async () => {
+  const response = await atsuRequest(new URL('http://localhost/api/test/dns'), async () => {
+    throw new TypeError('fetch failed', { cause: { code: 'EAI_AGAIN' } });
+  });
+  assert.equal(response.status, 502);
+  assert.equal((await response.json()).code, 'UPSTREAM_DNS');
+});

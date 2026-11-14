@@ -103,6 +103,8 @@ class AtsuApiService {
       });
 
       if (!res.ok) {
+        const detail = await res.json().catch(() => null);
+        if (typeof detail?.error === 'string') throw new Error(detail.error + (detail.code ? ` (${detail.code})` : ''));
         throw new Error(res.status === 403 ? 'Atsu denied access from this server. Please try again later.' : `Unable to load from Atsu (HTTP ${res.status}). Please try again.`);
       }
 
