@@ -24,6 +24,7 @@ test('Cloudflare connects to proxy, upgrades TLS for Atsu, and returns JSON', as
   assert.deepEqual(tlsOptions, { expectedServerHostname: 'atsu.moe' });
   assert.match(tunnelWrites[0], /CONNECT atsu.moe:443/);
   assert.match(tunnelWrites[0], /Proxy-Authorization: Basic/);
+  assert.match(upstreamWrites[0], /User-Agent: Mozilla/);
   assert.match(upstreamWrites[0], /GET \/api\/home2\/popular\?limit=1/);
   assert.doesNotMatch(upstreamWrites[0], /Proxy-Authorization|credential/);
 });
