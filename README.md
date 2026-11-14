@@ -56,7 +56,7 @@ This project is 100% ready for **Cloudflare Pages** deployment with zero extra c
    - **Build output directory**: `dist`
 5. Click **Save and Deploy**!
 
-> **Edge Functions**: The `functions/` folder forwards `/api/*` and `/cdn/*` directly to Atsu. No residential proxy, scraper service, R2 cache, or third-party image mirror is required. Same-origin routes avoid browser CORS restrictions; they cannot override an access denial from Atsu.
+> **Edge Functions**: The `functions/` folder forwards `/api/*` and `/cdn/*` through the Railway relay. The Railway relay uses a residential proxy configured through deployment environment variables. Same-origin routes avoid browser CORS restrictions; they cannot override an access denial from Atsu.
 
 ### Method 2: Direct Wrangler CLI Deploy
 ```bash
@@ -121,12 +121,18 @@ Open **`http://localhost:3300`** in your browser.
 └── wrangler.toml              # Cloudflare Pages configuration
 ```
 
-## Direct Atsu access and performance
+## Proxy access and performance
 
-The Node, Cloudflare Pages, and Vercel handlers use `lib/atsu.js` to request only `atsu.moe` and `cdn.atsu.moe`. No proxy credentials are needed. The browser uses same-origin `/api` and `/cdn` routes because cross-origin browser access depends on Atsu's CORS policy. The Vite development server also forwards directly to Atsu.
+Cloudflare Pages forwards API and CDN requests through the existing Railway relay at `https://mangareader-production-b77c3f15.up.railway.app`. Override this using `ATSU_RELAY_URL` in Cloudflare Pages environment settings if needed. Vercel uses the same relay unless residential credentials are configured there.
 
-Production handlers use a 12-second upstream deadline, share concurrent identical requests, and bound successful response caching to 32 MiB / 500 entries. Discovery responses cache for five minutes; chapter and image responses for one day. Failed requests are never cached or retried automatically. Atsu 403 responses remain failures with an explanatory message; network failures return 502. Allow outbound HTTPS to `atsu.moe` and `cdn.atsu.moe`. If Atsu denies the deployment IP, direct access remains unavailable; this application does not bypass that restriction.
+The Node/Railway server uses a residential HTTP CONNECT proxy when `PROXY_AUTH` is configured. Set these variables securely in Railway before redeploying:
 
-Reader, search, and secondary routes load on demand. Homepage shelves render independently, covers decode asynchronously, and browser requests share in-flight work. The service worker leaves API freshness to the API client and HTTP cache.
+- `PROXY_HOST`: your provider's hostname (default `gate-us.vaultproxies.com`).
+- `PROXY_PORT`: your provider's port (default `80`).
+- `PROXY_AUTH`: the provider's `username:password`; enter this in Railway settings, never commit it.
 
-Validate with `npm run build` and `node --test tests/atsu.test.js`. After `npm run server`, verify `/api/health`, `/`, and `/api/home2/popular?timeframe=daily&offset=0&limit=1`. The health endpoint checks the server only; live catalog readiness requires HTTP 200 with an `items` array from the catalog endpoint.
+Without `PROXY_AUTH`, the Node server uses direct Atsu access, which may be denied. `/api/health` reports `upstream: residential-proxy` when credentials are configured; this only confirms transport selection. Verify the catalog endpoint returns HTTP 200 with an `items` array and a chapter image loads before calling the deployment ready. The credentials formerly embedded in repository history should be replaced with fresh provider credentials.
+
+TLS verification remains enabled. Shared transport uses a 12-second deadline, coalesces concurrent requests, caches successful discovery responses for five minutes and chapter/images for one day, and bounds RAM caching to 32 MiB / 500 entries. Failures are not cached. Reader, search and secondary pages load on demand, and homepage shelves render independently.
+
+Run `npm run build` and `node --test tests/*.test.js`. Deployment verification: `/api/health` on Railway, then `/api/home2/popular?timeframe=daily&offset=0&limit=1` on Railway and Cloudflare Pages.
