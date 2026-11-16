@@ -100,7 +100,9 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
 
           {current.views ? (
             <span className="text-xs font-semibold text-gray-300 bg-white/10 px-2.5 py-1 rounded-md backdrop-blur">
-              {Number(current.views).toLocaleString()} Reads
+              {typeof current.views === 'number'
+                ? `${Number(current.views).toLocaleString()} Reads`
+                : `${current.views} Reads`}
             </span>
           ) : null}
 

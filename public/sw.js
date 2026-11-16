@@ -1,5 +1,5 @@
 // Voidflix Manga PWA Service Worker - 24-Hour Cache Policy
-const CACHE_NAME = 'voidflix-manga-v2';
+const CACHE_NAME = 'voidflix-manga-v3';
 const ONE_DAY_MS = 24 * 60 * 60 * 1000; // 24 hours (1 day)
 
 const PRECACHE_URLS = [

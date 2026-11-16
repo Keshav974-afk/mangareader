@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Navbar } from './components/Navbar';
 import { SearchModal } from './components/SearchModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { HomePage } from './pages/HomePage';
 import { DetailsPage } from './pages/DetailsPage';
 import { ReaderPage } from './pages/ReaderPage';
@@ -109,7 +110,9 @@ export const App: React.FC = () => {
 
         {/* Main Content Area */}
         <div className={`flex-1 ${!isReader ? 'max-w-7xl mx-auto w-full px-3 sm:px-6 pt-4 sm:pt-6 pb-20 md:pb-10' : ''}`}>
-          {renderCurrentView()}
+          <ErrorBoundary key={route}>
+            {renderCurrentView()}
+          </ErrorBoundary>
         </div>
 
         {/* Global Search Modal */}

@@ -260,7 +260,7 @@ export async function onRequest(context) {
           headers: {
             'Content-Type': 'application/json',
             'Cache-Control': policy.type === 'FOREVER' ? 'public, max-age=31536000, immutable' : `public, max-age=${policy.maxAge}, s-maxage=${policy.maxAge}, stale-while-revalidate=86400`,
-            'X-Proxy-Provider': 'vaultproxies-residential',
+            'X-Proxy-Provider': 'static-residential',
             ...corsHeaders
           }
         });
@@ -304,7 +304,7 @@ export async function onRequest(context) {
           headers: {
             'Content-Type': 'application/json',
             'Cache-Control': policy.type === 'FOREVER' ? 'public, max-age=31536000, immutable' : `public, max-age=${policy.maxAge}, s-maxage=${policy.maxAge}, stale-while-revalidate=86400`,
-            'X-Proxy-Provider': 'vaultproxies-residential',
+            'X-Proxy-Provider': 'static-residential',
             ...corsHeaders
           }
         });

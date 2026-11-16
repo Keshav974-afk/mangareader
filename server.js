@@ -15,12 +15,68 @@ const ATSU_API_BASE = 'https://atsu.moe';
 const ATSU_CDN_BASE = 'https://cdn.atsu.moe';
 const R2_PUBLIC_BASE = 'https://pub-2916bfced0d845f088ad2b3e71104031.r2.dev';
 
-// Dedicated US Residential Proxy Configuration (gate-us.vaultproxies.com:80)
-const PROXY_CONFIG = {
-  host: process.env.PROXY_HOST || 'gate-us.vaultproxies.com',
-  port: parseInt(process.env.PROXY_PORT || '80', 10),
-  auth: process.env.PROXY_AUTH || '4c6169f09d00279c:62f360c1eb4c9da0'
-};
+// 34 Static Residential Proxies Pool
+const DEFAULT_STATIC_PROXIES = `
+198.29.112.81:53515:dvjcqeka:iP1oVs83z5Zz
+198.29.112.79:52983:rzimkkmw:2gjCe2j7WBHM
+198.29.112.120:65410:cftckinz:FRx3nO8BqMhT
+198.29.112.125:51474:pcxdfjyq:TW9dKzOHKEOG
+198.29.112.144:60016:sqhxrgsx:4a0JyWZ7ySMY
+198.29.112.140:62177:lghkbhrn:i3vb4nMESlFr
+198.29.112.41:60043:fkortznj:2qHT4FbebxVo
+198.29.112.119:57220:rshqgbdm:qaZgHRTd98Il
+198.29.112.143:58511:ccynhgjb:T3Wiku2QnjLW
+198.29.112.138:63222:fecyblcz:wepP1oVktfiH
+198.29.112.142:57918:wqdxvhcc:DoYNnJh7MJL3
+69.33.57.228:51669:ojzuhzfd:UA2peViKA2Oh
+198.29.112.46:58369:gwtvzumh:HnJX2CbnTmci
+69.33.37.119:62262:tbsjcyzy:DLsg1wxvzwf6
+198.29.112.82:54656:wnidutnq:FJt81l8jEpCa
+198.29.112.54:57741:bhzqiaom:9Qihk1U8ORmn
+198.29.112.139:50883:ecfntjko:eFUuHrkS6HG3
+69.33.57.208:53384:hguslkep:VdkJUZpgo6Dr
+198.29.112.141:65304:hltscjwr:kMMFSFBntLh8
+198.29.107.149:51041:eyzbuntg:Z2moaitc7ydC
+198.29.107.195:63035:xogzddfh:6AIlbiwbUBKy
+198.29.107.145:54050:nqeiwuza:V3wOo9Tk5NH6
+198.29.107.186:56435:euaofhbj:36XOiOjFe8FH
+198.29.107.218:58793:yakpoozu:s6Z4wjMRXCZ3
+198.29.107.183:61829:qplryvju:BTo2H1bPI7Pd
+198.29.107.222:49631:nqbxbbuy:wYgis4dyVC2W
+198.29.107.201:56085:shrvscob:JdBSD3mgNIJR
+198.29.107.190:57724:krkjfkjd:km6K8lbiu3tV
+198.29.107.180:55057:lpckarql:gVZdifmMaQjN
+198.29.107.141:53165:ojqkwiug:pzvnmoWJ8HDE
+198.29.107.187:57982:qwahzvve:1xE0aBkKC9Cl
+198.29.107.142:56151:lxihaubi:MWgQqvd6k3FB
+198.29.107.175:54133:iqtpbytq:b9jkYzLloM2h
+198.29.107.148:53473:cuyjfioa:24w7WM7vaY6e
+`.trim();
+
+function parseProxyList(raw) {
+  if (!raw) return [];
+  return raw
+    .split(/[\r\n,]+/)
+    .map(line => line.trim())
+    .filter(line => line && !line.startsWith('#'))
+    .map(line => {
+      const parts = line.split(':');
+      if (parts.length >= 4) {
+        return {
+          host: parts[0],
+          port: parseInt(parts[1], 10),
+          auth: `${parts[2]}:${parts[3]}`
+        };
+      }
+      return null;
+    })
+    .filter(Boolean);
+}
+
+const STATIC_PROXIES = parseProxyList(process.env.STATIC_PROXIES);
+if (STATIC_PROXIES.length === 0) {
+  STATIC_PROXIES.push(...parseProxyList(DEFAULT_STATIC_PROXIES));
+}
 
 // Cloudflare R2 S3 Upload Configuration
 const R2_CONFIG = {
@@ -220,43 +276,68 @@ function uploadToR2(key, body, contentType = 'application/json') {
   }
 }
 
-// Create custom HTTPS agent that tunnels via the residential proxy
-const proxyAgent = new https.Agent({
-  keepAlive: true,
-  maxSockets: 100,
-  timeout: 30000
+// Pre-instantiate HTTPS Agents for each static proxy with connection pooling
+const proxyAgents = STATIC_PROXIES.map((proxy, index) => {
+  const agent = new https.Agent({
+    keepAlive: true,
+    maxSockets: 30,
+    timeout: 30000
+  });
+
+  agent.createConnection = function (options, callback) {
+    const connectReq = http.request({
+      host: proxy.host,
+      port: proxy.port,
+      method: 'CONNECT',
+      path: `${options.host}:${options.port || 443}`,
+      headers: {
+        'Proxy-Authorization': 'Basic ' + Buffer.from(proxy.auth).toString('base64'),
+        'Host': `${options.host}:${options.port || 443}`
+      }
+    });
+
+    connectReq.setTimeout(15000, () => {
+      connectReq.destroy(new Error(`Proxy connection timeout (${proxy.host}:${proxy.port})`));
+    });
+
+    connectReq.on('connect', (res, socket) => {
+      if (res.statusCode !== 200) {
+        socket.destroy();
+        return callback(new Error(`Static Proxy (${proxy.host}:${proxy.port}) CONNECT failed with status: ${res.statusCode}`));
+      }
+      const secureSocket = tls.connect({
+        host: options.host,
+        socket: socket,
+        servername: options.servername || options.host
+      }, () => {
+        callback(null, secureSocket);
+      });
+      secureSocket.on('error', err => callback(err));
+    });
+
+    connectReq.on('error', err => callback(err));
+    connectReq.end();
+  };
+
+  agent.proxyIndex = index;
+  agent.proxyHost = `${proxy.host}:${proxy.port}`;
+  return agent;
 });
 
-proxyAgent.createConnection = function (options, callback) {
-  const req = http.request({
-    host: PROXY_CONFIG.host,
-    port: PROXY_CONFIG.port,
-    method: 'CONNECT',
-    path: `${options.host}:${options.port || 443}`,
-    headers: {
-      'Proxy-Authorization': 'Basic ' + Buffer.from(PROXY_CONFIG.auth).toString('base64'),
-      'Host': `${options.host}:${options.port || 443}`
-    }
-  });
+// Fallback direct HTTPS agent if proxy pool is empty
+const fallbackAgent = new https.Agent({ keepAlive: true, maxSockets: 30 });
 
-  req.on('connect', (res, socket) => {
-    if (res.statusCode !== 200) {
-      socket.destroy();
-      return callback(new Error(`Residential Proxy CONNECT failed with status: ${res.statusCode}`));
-    }
-    const secureSocket = tls.connect({
-      host: options.host,
-      socket: socket,
-      servername: options.servername || options.host
-    }, () => {
-      callback(null, secureSocket);
-    });
-    secureSocket.on('error', err => callback(err));
-  });
+let roundRobinCounter = 0;
+function getNextProxyAgent(skipIndex = -1) {
+  if (proxyAgents.length === 0) return fallbackAgent;
+  if (proxyAgents.length === 1) return proxyAgents[0];
 
-  req.on('error', err => callback(err));
-  req.end();
-};
+  let chosenIndex = (roundRobinCounter++) % proxyAgents.length;
+  if (chosenIndex === skipIndex) {
+    chosenIndex = (chosenIndex + 1) % proxyAgents.length;
+  }
+  return proxyAgents[chosenIndex];
+}
 
 // In-memory cache for API responses (fast L1 RAM cache - 24 Hours)
 const apiCache = new Map();
@@ -295,7 +376,13 @@ function handleApiProxy(req, res, targetPath, parsedUrl) {
   // Healthcheck
   if (targetPath === '/api/health' || targetPath === '/api/health/') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', proxy: 'voidflix-manga-proxy', version: '3.0-residential-proxy', time: new Date().toISOString() }));
+    res.end(JSON.stringify({
+      status: 'ok',
+      proxy: 'voidflix-manga-proxy',
+      version: '4.0-static-proxy-pool',
+      poolSize: STATIC_PROXIES.length,
+      time: new Date().toISOString()
+    }));
     return;
   }
 
@@ -304,7 +391,8 @@ function handleApiProxy(req, res, targetPath, parsedUrl) {
   const cacheKey = req.method + ':' + fullUrl;
   const policy = getCachePolicy(targetPath, query);
 
-  function executeProxy(retryCount = 0) {
+  function executeProxy(retryCount = 0, lastFailedIndex = -1) {
+    const selectedAgent = getNextProxyAgent(lastFailedIndex);
     const headers = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
       'Referer': ATSU_API_BASE + '/',
@@ -314,7 +402,7 @@ function handleApiProxy(req, res, targetPath, parsedUrl) {
     const proxyReq = https.request(fullUrl, {
       method: req.method,
       headers,
-      agent: proxyAgent
+      agent: selectedAgent
     }, (proxyRes) => {
       let chunks = [];
       proxyRes.on('data', chunk => chunks.push(chunk));
@@ -322,9 +410,9 @@ function handleApiProxy(req, res, targetPath, parsedUrl) {
         const responseBuffer = Buffer.concat(chunks);
         const isBlock = proxyRes.statusCode === 403 || proxyRes.statusCode === 401;
 
-        if (isBlock && retryCount < 2 && req.method === 'GET') {
-          console.log(`[Proxy] Upstream status ${proxyRes.statusCode} for ${targetPath}. Retrying via residential proxy (attempt ${retryCount + 1})...`);
-          setTimeout(() => executeProxy(retryCount + 1), 500);
+        if (isBlock && retryCount < 3 && req.method === 'GET') {
+          console.log(`[Proxy] Upstream status ${proxyRes.statusCode} on static proxy ${selectedAgent?.proxyHost} for ${targetPath}. Retrying with next static proxy (attempt ${retryCount + 1})...`);
+          setTimeout(() => executeProxy(retryCount + 1, selectedAgent?.proxyIndex), 300);
           return;
         }
 
@@ -333,7 +421,7 @@ function handleApiProxy(req, res, targetPath, parsedUrl) {
           'Content-Type': contentType,
           'Cache-Control': policy.type === 'FOREVER' ? 'public, max-age=31536000, immutable' : `public, max-age=${policy.maxAge}, s-maxage=${policy.maxAge}, stale-while-revalidate=86400`,
           'Access-Control-Allow-Origin': '*',
-          'X-Proxy-Provider': 'vaultproxies'
+          'X-Proxy-Provider': 'static-residential'
         });
         res.end(responseBuffer);
         if (proxyRes.statusCode === 200 && req.method === 'GET' && responseBuffer.length > 0) {
@@ -345,9 +433,9 @@ function handleApiProxy(req, res, targetPath, parsedUrl) {
     });
 
     proxyReq.on('error', (err) => {
-      if (retryCount < 2 && req.method === 'GET') {
-        console.log(`[Proxy] Network error via vaultproxies for ${targetPath}, retrying...`);
-        setTimeout(() => executeProxy(retryCount + 1), 500);
+      if (retryCount < 3 && req.method === 'GET') {
+        console.log(`[Proxy] Network error via static proxy ${selectedAgent?.proxyHost} for ${targetPath}: ${err.message}. Retrying with next static proxy...`);
+        setTimeout(() => executeProxy(retryCount + 1, selectedAgent?.proxyIndex), 300);
         return;
       }
       res.writeHead(502, { 'Content-Type': 'application/json' });
@@ -442,7 +530,8 @@ function handleCdnProxy(req, res, targetPath, parsedUrl) {
 
   fetchFromProxy();
 
-  function fetchFromProxy() {
+  function fetchFromProxy(retryCount = 0, lastFailedIndex = -1) {
+    const selectedAgent = getNextProxyAgent(lastFailedIndex);
     const fullUrl = `${ATSU_CDN_BASE}${targetPath}${query}`;
     const headers = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
@@ -453,13 +542,18 @@ function handleCdnProxy(req, res, targetPath, parsedUrl) {
     const proxyReq = https.request(fullUrl, {
       method: 'GET',
       headers,
-      agent: proxyAgent
+      agent: selectedAgent
     }, (proxyRes) => {
       // Follow redirect if 301/302
       if ((proxyRes.statusCode === 301 || proxyRes.statusCode === 302) && proxyRes.headers.location) {
         const loc = proxyRes.headers.location;
         const redirectPath = loc.startsWith('http') ? new URL(loc).pathname : loc;
         handleCdnProxy(req, res, redirectPath, parsedUrl);
+        return;
+      }
+
+      if (proxyRes.statusCode === 403 && retryCount < 2) {
+        fetchFromProxy(retryCount + 1, selectedAgent?.proxyIndex);
         return;
       }
 
@@ -477,6 +571,7 @@ function handleCdnProxy(req, res, targetPath, parsedUrl) {
           'Content-Type': contentType,
           'Cache-Control': isPoster ? 'public, max-age=31536000, immutable' : 'public, max-age=604800, immutable',
           'X-Cache': 'PROXY-FETCH',
+          'X-Proxy-Provider': 'static-residential',
           'Access-Control-Allow-Origin': '*'
         });
         res.end(buffer);
@@ -484,7 +579,13 @@ function handleCdnProxy(req, res, targetPath, parsedUrl) {
       });
     });
 
-    proxyReq.on('error', () => fetchFromPhoton());
+    proxyReq.on('error', () => {
+      if (retryCount < 2) {
+        fetchFromProxy(retryCount + 1, selectedAgent?.proxyIndex);
+      } else {
+        fetchFromPhoton();
+      }
+    });
     proxyReq.end();
   }
 
@@ -584,6 +685,6 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`[Voidflix Proxy] Server running on port ${PORT}`);
-  console.log(`[Voidflix Proxy] Dedicated Residential Proxy: ${PROXY_CONFIG.host}:${PROXY_CONFIG.port}`);
-  console.log(`[Voidflix Proxy] Scrapfly completely disabled; 100% residential proxy & Cloudflare R2 cache`);
+  console.log(`[Voidflix Proxy] Loaded ${STATIC_PROXIES.length} Static Residential Proxies (round-robin with automatic failover)`);
+  console.log(`[Voidflix Proxy] Scrapfly completely disabled; 100% static residential proxy pool & Cloudflare R2 cache`);
 });

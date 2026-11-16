@@ -70,68 +70,7 @@ export const DetailsPage: React.FC<DetailsPageProps> = ({ mangaId, onNavigate })
     return () => { isMounted = false; };
   }, [mangaId]);
 
-  if (isLoading) {
-    return (
-      <div className="animate-pulse space-y-6 max-w-6xl mx-auto">
-        {/* Banner Skeleton */}
-        <div className="relative h-60 sm:h-80 md:h-96 w-full bg-carbon-850 rounded-3xl overflow-hidden border border-white/5">
-          <div className="absolute inset-0 bg-gradient-to-t from-carbon-950 via-carbon-950/40 to-transparent" />
-        </div>
-
-        {/* Content Skeleton */}
-        <div className="relative -mt-28 sm:-mt-36 z-10 px-4 sm:px-8">
-          <div className="flex flex-col md:flex-row gap-8 items-start">
-            {/* Poster Skeleton */}
-            <div className="w-44 sm:w-56 md:w-64 aspect-[2/3] rounded-2xl bg-carbon-800 border border-white/10 shrink-0 shadow-2xl" />
-
-            {/* Info Skeleton */}
-            <div className="flex-1 space-y-4 w-full pt-4">
-              <div className="h-8 sm:h-10 bg-carbon-800 rounded-xl w-3/4" />
-              <div className="h-5 bg-carbon-800/70 rounded-lg w-1/2" />
-              <div className="flex gap-2">
-                <div className="h-7 w-20 bg-carbon-800 rounded-lg" />
-                <div className="h-7 w-20 bg-carbon-800 rounded-lg" />
-                <div className="h-7 w-20 bg-carbon-800 rounded-lg" />
-              </div>
-              <div className="space-y-2 pt-2">
-                <div className="h-4 bg-carbon-800/80 rounded w-full" />
-                <div className="h-4 bg-carbon-800/80 rounded w-5/6" />
-                <div className="h-4 bg-carbon-800/80 rounded w-4/6" />
-              </div>
-              <div className="flex gap-4 pt-4">
-                <div className="h-12 w-44 bg-carbon-800 rounded-xl" />
-                <div className="h-12 w-32 bg-carbon-800 rounded-xl" />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!info) {
-    return (
-      <div className="py-20 text-center text-white">
-        <h2 className="text-xl font-bold mb-2">Series Not Found</h2>
-        <p className="text-sm text-gray-400 mb-6">Could not retrieve metadata from Atsu API.</p>
-        <button
-          onClick={() => onNavigate('#/')}
-          className="px-6 py-2.5 rounded-xl bg-brand-500 font-bold text-sm"
-        >
-          Return Home
-        </button>
-      </div>
-    );
-  }
-
-  const isNovel = info.medium === 'Novel';
-  const posterUrl = api.getPosterUrl(info, 'large');
-  const bannerUrl = api.getBannerUrl(info.banner);
-  const bookmarked = isBookmarked(info.id);
-  const rating = info.avgRating ? info.avgRating.toFixed(1) : null;
-  const progress = getProgress(info.id);
-
-  // Build scanlator dictionary from info
+  // Build scanlator dictionary from info (must be called unconditionally before early returns)
   const scanlatorMap = useMemo(() => {
     const map = new Map<string, string>();
     if (info?.scanlators) {
@@ -201,6 +140,67 @@ export const DetailsPage: React.FC<DetailsPageProps> = ({ mangaId, onNavigate })
       return sortAsc ? diff : -diff;
     });
   }, [chapters, selectedScanlator, primaryGroupId, chapterSearch, sortAsc]);
+
+  if (isLoading) {
+    return (
+      <div className="animate-pulse space-y-6 max-w-6xl mx-auto">
+        {/* Banner Skeleton */}
+        <div className="relative h-60 sm:h-80 md:h-96 w-full bg-carbon-850 rounded-3xl overflow-hidden border border-white/5">
+          <div className="absolute inset-0 bg-gradient-to-t from-carbon-950 via-carbon-950/40 to-transparent" />
+        </div>
+
+        {/* Content Skeleton */}
+        <div className="relative -mt-28 sm:-mt-36 z-10 px-4 sm:px-8">
+          <div className="flex flex-col md:flex-row gap-8 items-start">
+            {/* Poster Skeleton */}
+            <div className="w-44 sm:w-56 md:w-64 aspect-[2/3] rounded-2xl bg-carbon-800 border border-white/10 shrink-0 shadow-2xl" />
+
+            {/* Info Skeleton */}
+            <div className="flex-1 space-y-4 w-full pt-4">
+              <div className="h-8 sm:h-10 bg-carbon-800 rounded-xl w-3/4" />
+              <div className="h-5 bg-carbon-800/70 rounded-lg w-1/2" />
+              <div className="flex gap-2">
+                <div className="h-7 w-20 bg-carbon-800 rounded-lg" />
+                <div className="h-7 w-20 bg-carbon-800 rounded-lg" />
+                <div className="h-7 w-20 bg-carbon-800 rounded-lg" />
+              </div>
+              <div className="space-y-2 pt-2">
+                <div className="h-4 bg-carbon-800/80 rounded w-full" />
+                <div className="h-4 bg-carbon-800/80 rounded w-5/6" />
+                <div className="h-4 bg-carbon-800/80 rounded w-4/6" />
+              </div>
+              <div className="flex gap-4 pt-4">
+                <div className="h-12 w-44 bg-carbon-800 rounded-xl" />
+                <div className="h-12 w-32 bg-carbon-800 rounded-xl" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!info) {
+    return (
+      <div className="py-20 text-center text-white">
+        <h2 className="text-xl font-bold mb-2">Series Not Found</h2>
+        <p className="text-sm text-gray-400 mb-6">Could not retrieve metadata from Atsu API.</p>
+        <button
+          onClick={() => onNavigate('#/')}
+          className="px-6 py-2.5 rounded-xl bg-brand-500 font-bold text-sm"
+        >
+          Return Home
+        </button>
+      </div>
+    );
+  }
+
+  const isNovel = info.medium === 'Novel';
+  const posterUrl = api.getPosterUrl(info, 'large');
+  const bannerUrl = api.getBannerUrl(info.banner);
+  const bookmarked = isBookmarked(info.id);
+  const rating = info.avgRating ? Number(info.avgRating).toFixed(1) : null;
+  const progress = getProgress(info.id);
 
   const firstChapter = [...chapters].sort((a, b) => Number(a.number) - Number(b.number))[0];
   const resumeChapter = progress
