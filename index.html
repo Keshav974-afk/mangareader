@@ -2,10 +2,10 @@
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
-    <link rel="alternate icon" type="image/png" href="/icons/icon-192.png" />
-    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="/icons/icon.svg?v=4" />
+    <link rel="alternate icon" type="image/png" href="/icons/icon-192.png?v=4" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png?v=4" />
+    <link rel="manifest" href="/manifest.json?v=4" />
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
     <meta name="theme-color" content="#07070a" />
@@ -22,19 +22,21 @@
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Voidflix Manga — Read Manga, Manhwa & Light Novels" />
     <meta property="og:description" content="Read thousands of manga, manhwa, webtoons, and light novels online with Voidflix Manga." />
-    <meta property="og:image" content="/icons/icon-512.png" />
+    <meta property="og:image" content="/icons/icon-512.png?v=4" />
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;500&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-    <!-- PWA Service Worker Registration -->
+    <!-- PWA Service Worker Registration & Live Cache Invalidation -->
     <script>
       if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js').then((reg) => {
             console.log('Voidflix Manga PWA ServiceWorker active:', reg.scope);
+            // Immediately check and pull updated worker
+            reg.update().catch(() => {});
           }).catch((err) => {
             console.warn('PWA ServiceWorker registration failed:', err);
           });

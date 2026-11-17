@@ -1,11 +1,15 @@
 // Voidflix Manga PWA Service Worker - 24-Hour Cache Policy
-const CACHE_NAME = 'voidflix-manga-v3';
+const CACHE_NAME = 'voidflix-manga-v4';
 const ONE_DAY_MS = 24 * 60 * 60 * 1000; // 24 hours (1 day)
 
 const PRECACHE_URLS = [
   '/',
   '/index.html',
-  '/manifest.json',
+  '/manifest.json?v=4',
+  '/icons/icon.svg?v=4',
+  '/icons/icon-192.png?v=4',
+  '/icons/icon-512.png?v=4',
+  '/icons/icon-maskable.png?v=4',
   '/icons/icon.svg',
   '/icons/icon-192.png',
   '/icons/icon-512.png'
@@ -39,6 +43,7 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         cacheNames.map((name) => {
           if (name !== CACHE_NAME) {
+            console.log('Clearing old PWA cache:', name);
             return caches.delete(name);
           }
         })
