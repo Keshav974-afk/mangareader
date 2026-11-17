@@ -77,23 +77,23 @@ export const MangaDownloadModal: React.FC<MangaDownloadModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200"
       onClick={() => {
         if (!downloadingFormat) onClose();
       }}
     >
       <div
-        className="relative w-full max-w-lg rounded-2xl bg-[#0f0f14] border border-white/10 p-5 sm:p-6 text-white shadow-2xl max-h-[92vh] overflow-y-auto no-scrollbar"
+        className="relative w-full max-w-lg rounded-2xl bg-[#121218] border border-white/10 p-5 sm:p-6 text-white shadow-2xl max-h-[92vh] overflow-y-auto no-scrollbar"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-3 pb-4 border-b border-white/10">
           <div>
             <div className="flex items-center gap-2 mb-1.5">
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-brand-500/20 text-brand-400 border border-brand-500/30 uppercase tracking-wider">
-                Offline Chapter Download
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white/10 text-gray-300 border border-white/10">
+                Chapter Download
               </span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-white/10 text-gray-300">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-white/5 text-gray-400 border border-white/5">
                 {isPdf ? 'PDF Comic' : `${pageCount} Pages`}
               </span>
             </div>
@@ -109,7 +109,7 @@ export const MangaDownloadModal: React.FC<MangaDownloadModalProps> = ({
               if (!downloadingFormat) onClose();
             }}
             disabled={!!downloadingFormat}
-            className={`p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors ${
+            className={`p-1.5 rounded-full text-gray-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer ${
               downloadingFormat ? 'opacity-30 cursor-not-allowed' : ''
             }`}
             aria-label="Close modal"
@@ -119,7 +119,7 @@ export const MangaDownloadModal: React.FC<MangaDownloadModalProps> = ({
         </div>
 
         {/* Notice */}
-        <div className="my-4 rounded-xl bg-white/5 border border-white/5 p-3 text-xs text-gray-300 leading-relaxed">
+        <div className="my-4 rounded-xl bg-white/[0.03] border border-white/10 p-3 text-xs text-gray-300 leading-relaxed">
           <p>
             Choose your preferred offline format. Files are generated client-side at maximum original resolution with no watermarks.
           </p>
@@ -127,19 +127,19 @@ export const MangaDownloadModal: React.FC<MangaDownloadModalProps> = ({
 
         {/* Active Download Progress Bar */}
         {downloadingFormat && progress && (
-          <div className="mb-4 rounded-xl border border-brand-500/40 bg-brand-500/10 p-4 space-y-2.5 animate-in fade-in">
+          <div className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 space-y-2.5 animate-in fade-in">
             <div className="flex items-center justify-between text-xs font-bold">
               <span className="flex items-center gap-2 text-white">
-                <Loader2 className="w-4 h-4 text-brand-400 animate-spin" />
+                <Loader2 className="w-4 h-4 text-emerald-400 animate-spin" />
                 <span>Generating {downloadingFormat.toUpperCase()}...</span>
               </span>
-              <span className="text-brand-400 tabular-nums font-mono">{progress.percent}%</span>
+              <span className="text-emerald-400 tabular-nums font-mono">{progress.percent}%</span>
             </div>
 
             {/* Progress track */}
-            <div className="w-full h-2 bg-black/60 rounded-full overflow-hidden border border-white/10">
+            <div className="w-full h-1.5 bg-black/60 rounded-full overflow-hidden border border-white/10">
               <div
-                className="h-full bg-gradient-to-r from-brand-500 to-emerald-400 rounded-full transition-all duration-200"
+                className="h-full bg-emerald-500 rounded-full transition-all duration-200"
                 style={{ width: `${progress.percent}%` }}
               />
             </div>
@@ -168,37 +168,37 @@ export const MangaDownloadModal: React.FC<MangaDownloadModalProps> = ({
           </div>
         )}
 
-        {/* Format Selection Cards */}
+        {/* Format Selection Cards (Clean, Cohesive Cinema-Dark Theme) */}
         <div className="space-y-3">
           {/* Option 1: PDF Format */}
-          <div className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/[0.07] p-3.5 sm:p-4 transition group">
+          <div className="rounded-2xl border border-white/10 bg-[#181822] hover:border-white/20 p-4 transition-all duration-200 group shadow-md">
             <div className="flex items-center justify-between gap-2 mb-1.5">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400">
-                  <FileText className="w-5 h-5" />
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center text-white shrink-0">
+                  <FileText className="w-5 h-5 text-emerald-400" />
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-white flex items-center gap-2">
                     PDF Document (.pdf)
                   </h4>
-                  <span className="text-[10px] font-semibold text-rose-300">
+                  <span className="text-[11px] font-medium text-gray-400">
                     Universal Reader • Books, Acrobat, Kindle
                   </span>
                 </div>
               </div>
             </div>
 
-            <p className="text-[11px] text-gray-300 leading-normal my-2.5">
+            <p className="text-xs text-gray-300 leading-normal my-3">
               High-resolution multi-page PDF formatted to each page&apos;s exact dimensions. Works on Adobe Acrobat, Apple Books, Google Drive, Kindle, and all PDF apps.
             </p>
 
             <button
               onClick={() => startDownload('pdf')}
               disabled={!!downloadingFormat}
-              className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition shadow active:scale-95 cursor-pointer ${
+              className={`w-full py-2.5 px-4 rounded-full font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 cursor-pointer ${
                 downloadingFormat === 'pdf'
-                  ? 'bg-rose-600/50 text-white cursor-wait'
-                  : 'bg-rose-600 hover:bg-rose-500 text-white'
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 cursor-wait'
+                  : 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-emerald-500/20'
               }`}
             >
               {downloadingFormat === 'pdf' ? (
@@ -216,34 +216,34 @@ export const MangaDownloadModal: React.FC<MangaDownloadModalProps> = ({
           </div>
 
           {/* Option 2: CBZ Format */}
-          <div className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/[0.07] p-3.5 sm:p-4 transition group">
+          <div className="rounded-2xl border border-white/10 bg-[#181822] hover:border-white/20 p-4 transition-all duration-200 group shadow-md">
             <div className="flex items-center justify-between gap-2 mb-1.5">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
-                  <BookOpen className="w-5 h-5" />
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center text-white shrink-0">
+                  <BookOpen className="w-5 h-5 text-emerald-400" />
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-white flex items-center gap-2">
                     Comic Book ZIP (.cbz)
                   </h4>
-                  <span className="text-[10px] font-semibold text-indigo-300">
+                  <span className="text-[11px] font-medium text-gray-400">
                     Standard Comic Archive • Tachiyomi, Mihon, CDisplayEx
                   </span>
                 </div>
               </div>
             </div>
 
-            <p className="text-[11px] text-gray-300 leading-normal my-2.5">
-              Standard comic archive with sequentially named pages and embedded <code className="text-[10px] text-gray-400">ComicInfo.xml</code> metadata. Perfect for dedicated comic and manga readers on mobile or desktop.
+            <p className="text-xs text-gray-300 leading-normal my-3">
+              Standard comic archive with sequentially named pages and embedded <code className="text-[10px] text-gray-400 font-mono">ComicInfo.xml</code> metadata. Perfect for dedicated comic and manga readers on mobile or desktop.
             </p>
 
             <button
               onClick={() => startDownload('cbz')}
               disabled={!!downloadingFormat}
-              className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition shadow active:scale-95 cursor-pointer ${
+              className={`w-full py-2.5 px-4 rounded-full font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 cursor-pointer ${
                 downloadingFormat === 'cbz'
-                  ? 'bg-indigo-600/50 text-white cursor-wait'
-                  : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 cursor-wait'
+                  : 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-emerald-500/20'
               }`}
             >
               {downloadingFormat === 'cbz' ? (
@@ -262,7 +262,7 @@ export const MangaDownloadModal: React.FC<MangaDownloadModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="mt-5 pt-3 border-t border-white/10 flex items-center justify-between">
+        <div className="mt-5 pt-3.5 border-t border-white/10 flex items-center justify-between">
           <span className="text-[11px] text-gray-400">
             {isPdf ? 'Source: Direct PDF' : `Source: ${pageCount} High-Res Images`}
           </span>
@@ -271,7 +271,7 @@ export const MangaDownloadModal: React.FC<MangaDownloadModalProps> = ({
               if (!downloadingFormat) onClose();
             }}
             disabled={!!downloadingFormat}
-            className={`text-xs font-semibold text-gray-400 hover:text-white transition-colors ${
+            className={`px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/15 text-xs font-semibold text-gray-300 hover:text-white transition-colors cursor-pointer ${
               downloadingFormat ? 'opacity-30 cursor-not-allowed' : ''
             }`}
           >
