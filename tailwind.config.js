@@ -15,6 +15,12 @@ export default {
           500: '#10b981',
           600: '#059669',
         },
+        primary: {
+          DEFAULT: '#10b981',
+          foreground: '#ffffff',
+          dark: '#059669',
+          light: '#34d399',
+        },
         accent: {
           500: '#6366f1',
           600: '#4f46e5',
@@ -29,6 +35,7 @@ export default {
         }
       },
       fontFamily: {
+        display: ['"Bebas Neue"', 'Oswald', 'system-ui', 'sans-serif'],
         sans: ['Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'],
         serif: ['Merriweather', 'Lora', 'Georgia', 'serif'],
         mono: ['JetBrains Mono', 'Fira Code', 'monospace']

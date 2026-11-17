@@ -61,7 +61,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, onNav
       >
         {/* Search Header */}
         <div className="p-4 border-b border-white/10 flex items-center gap-3">
-          <Search className="w-5 h-5 text-brand-400 shrink-0" />
+          <Search className="w-5 h-5 text-emerald-400 shrink-0" />
           <input
             ref={inputRef}
             type="text"
@@ -70,7 +70,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, onNav
             placeholder="Search thousands of manga, manhwa, novels, authors..."
             className="flex-1 bg-transparent text-white placeholder-gray-500 text-sm sm:text-base outline-none font-medium"
           />
-          {isLoading && <Loader2 className="w-5 h-5 text-brand-400 animate-spin shrink-0" />}
+          {isLoading && <Loader2 className="w-5 h-5 text-emerald-400 animate-spin shrink-0" />}
           {query ? (
             <button
               onClick={() => setQuery('')}
@@ -85,15 +85,15 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, onNav
           )}
         </div>
 
-        {/* Medium Filters */}
-        <div className="flex items-center gap-2 px-4 py-2.5 bg-carbon-950/60 border-b border-white/5 text-xs font-semibold overflow-x-auto no-scrollbar">
+        {/* Medium Filters (Flowflix Rounded Pills) */}
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-[#121218] border-b border-white/5 text-xs font-semibold overflow-x-auto no-scrollbar">
           {(['all', 'Comic', 'Novel'] as const).map(m => (
             <button
               key={m}
               onClick={() => setMedium(m)}
-              className={`px-3 py-1 rounded-lg transition-all ${
+              className={`px-3.5 py-1 rounded-full transition-all cursor-pointer ${
                 medium === m
-                  ? 'bg-brand-500 text-white font-bold shadow-sm'
+                  ? 'bg-emerald-500 text-white font-bold shadow-md shadow-emerald-500/25'
                   : 'text-gray-400 hover:text-white hover:bg-white/5'
               }`}
             >
@@ -117,7 +117,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, onNav
                     onClose();
                     onNavigate(`#/manga/${item.id}`);
                   }}
-                  className="flex items-center gap-3.5 p-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.04] hover:border-brand-500/30 cursor-pointer transition-all group"
+                  className="flex items-center gap-3.5 p-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.04] hover:border-emerald-500/30 cursor-pointer transition-all group"
                 >
                   {/* Thumbnail */}
                   <div className="w-12 h-16 rounded-lg overflow-hidden bg-carbon-800 shrink-0 relative">
@@ -134,7 +134,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, onNav
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 mb-0.5">
                       <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded ${
-                        isNovel ? 'bg-indigo-500/20 text-indigo-300' : 'bg-brand-500/20 text-brand-400'
+                        isNovel ? 'bg-indigo-500/20 text-indigo-300' : 'bg-emerald-500/20 text-emerald-400'
                       }`}>
                         {isNovel ? 'Novel' : (item.type || 'Manga')}
                       </span>
@@ -149,7 +149,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, onNav
                       )}
                     </div>
 
-                    <h4 className="font-bold text-sm text-gray-200 group-hover:text-brand-400 transition-colors truncate">
+                    <h4 className="font-bold text-sm text-gray-200 group-hover:text-emerald-400 transition-colors truncate">
                       {item.title}
                     </h4>
 
@@ -181,7 +181,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, onNav
                   <button
                     key={s}
                     onClick={() => setQuery(s)}
-                    className="px-3 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-gray-300 transition"
+                    className="px-3.5 py-1.5 rounded-full bg-white/5 hover:bg-emerald-500/20 hover:text-emerald-300 text-xs text-gray-300 transition-all border border-white/5 cursor-pointer"
                   >
                     {s}
                   </button>

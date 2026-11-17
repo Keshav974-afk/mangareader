@@ -1,21 +1,8 @@
 import React, { useState } from 'react';
-import { Star, BookOpen, BookText, Clock } from 'lucide-react';
+import { Star, BookOpen, BookText, Play, Plus, Check, ChevronDown, Bookmark } from 'lucide-react';
 import { MangaItem } from '../types/atsu';
 import { api } from '../services/api';
-
-function formatTimeAgo(timestamp: number): string {
-  const diff = Date.now() - timestamp;
-  if (diff < 0) return 'Just now';
-  const mins = Math.floor(diff / (60 * 1000));
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  return `${months}mo ago`;
-}
+import { useReadingHistory } from '../hooks/useReadingHistory';
 
 interface MangaCardProps {
   item: MangaItem;
@@ -23,21 +10,33 @@ interface MangaCardProps {
   width?: string;
 }
 
-export const MangaCard: React.FC<MangaCardProps> = ({ item, onNavigate, width = 'w-36 sm:w-44 md:w-48' }) => {
+export const MangaCard: React.FC<MangaCardProps> = ({
+  item,
+  onNavigate,
+  width = 'w-32 sm:w-44 md:w-48 lg:w-52',
+}) => {
   const [imgError, setImgError] = useState(false);
   const [fallbackTried, setFallbackTried] = useState(false);
   const initialUrl = api.getPosterUrl(item, 'medium');
   const [imgSrc, setImgSrc] = useState(initialUrl);
 
+  const { isBookmarked, toggleBookmark, getProgress } = useReadingHistory();
+  const bookmarked = isBookmarked(item.id);
+  const progress = getProgress(item.id);
+
   const isNovel = item.medium === 'Novel';
-  const rating = item.mbRating ? item.mbRating.toFixed(1) : null;
+  const rating = item.mbRating ? Number(item.mbRating).toFixed(1) : null;
   const title = item.title || item.englishTitle || 'Untitled';
 
   const handleError = () => {
-    // If initial image fails, fallback to WordPress Photon edge
     if (!fallbackTried) {
       setFallbackTried(true);
-      const posterPath = item.image || (item as any).poster?.image || item.mediumImage || (item as any).poster?.mediumImage || '';
+      const posterPath =
+        item.image ||
+        (item as any).poster?.image ||
+        item.mediumImage ||
+        (item as any).poster?.mediumImage ||
+        '';
       const clean = posterPath.replace(/^https?:\/\/cdn\.atsu\.moe\//, '').replace(/^\/?static\/?/, '');
       if (clean) {
         setImgSrc(`https://i0.wp.com/cdn.atsu.moe/static/${clean}`);
@@ -47,81 +46,136 @@ export const MangaCard: React.FC<MangaCardProps> = ({ item, onNavigate, width = 
     setImgError(true);
   };
 
+  const handleCardClick = () => {
+    onNavigate(`#/manga/${item.id}`);
+  };
+
+  const handlePlayClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (progress && progress.chapterId) {
+      onNavigate(`#/read/${item.id}/${progress.chapterId}`);
+    } else {
+      onNavigate(`#/manga/${item.id}`);
+    }
+  };
+
+  const handleBookmarkClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    toggleBookmark(item);
+  };
+
   return (
     <div
-      onClick={() => onNavigate(`#/manga/${item.id}`)}
-      className={`group relative ${width.includes('w-full') ? 'w-full' : 'shrink-0 ' + width} cursor-pointer select-none transition-all duration-300 hover:-translate-y-1 active:scale-95`}
+      role="button"
+      tabIndex={0}
+      onClick={handleCardClick}
+      onKeyDown={(e) => e.key === 'Enter' && handleCardClick()}
+      className={`group relative ${
+        width.includes('w-full') ? 'w-full' : 'shrink-0 ' + width
+      } aspect-[2/3] rounded-xl sm:rounded-2xl overflow-hidden bg-[#181818] border border-white/10 cursor-pointer transition-all duration-300 ease-out hover:scale-105 sm:hover:scale-108 hover:z-30 hover:shadow-2xl hover:shadow-black/95 select-none text-left`}
+      style={{ touchAction: 'manipulation' }}
     >
-      {/* Poster wrapper with aspect ratio 2/3 */}
-      <div className="relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-carbon-800 border border-white/[0.08] group-hover:border-white/30 transition-all">
-        {imgError || !imgSrc ? (
-          <div className="w-full h-full flex flex-col items-center justify-center p-3 text-center bg-carbon-850 text-gray-500">
-            {isNovel ? <BookText className="w-8 h-8 mb-2 opacity-50" /> : <BookOpen className="w-8 h-8 mb-2 opacity-50" />}
-            <span className="text-[11px] font-semibold line-clamp-2 text-gray-400">{title}</span>
-          </div>
-        ) : (
-          <img
-            src={imgSrc}
-            alt={title}
-            loading="lazy"
-            onError={handleError}
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-          />
-        )}
-
-        {/* Gradient shadow overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-carbon-950 via-carbon-950/20 to-transparent opacity-80 group-hover:opacity-60 transition-opacity" />
-
-        {/* Top Badges */}
-        <div className="absolute top-2 inset-x-2 flex items-center justify-between gap-1 pointer-events-none">
-          {/* Medium Pill */}
-          <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md backdrop-blur-md shadow-sm ${
-            isNovel 
-              ? 'bg-indigo-600/90 text-white border border-indigo-400/30' 
-              : 'bg-emerald-600/90 text-white border border-emerald-400/30'
-          }`}>
-            {isNovel ? 'Novel' : (item.type || 'Comic')}
-          </span>
-
-          {/* Rating */}
-          {rating ? (
-            <span className="flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-black/75 backdrop-blur-md text-amber-400 border border-white/10">
-              <Star className="w-3 h-3 fill-amber-400 stroke-amber-400" />
-              {rating}
-            </span>
-          ) : null}
+      {/* Poster Image */}
+      {imgError || !imgSrc ? (
+        <div className="w-full h-full flex flex-col items-center justify-center p-3 text-center bg-carbon-850 text-gray-500">
+          {isNovel ? <BookText className="w-8 h-8 mb-2 opacity-50" /> : <BookOpen className="w-8 h-8 mb-2 opacity-50" />}
+          <span className="text-[11px] font-semibold line-clamp-2 text-gray-400">{title}</span>
         </div>
+      ) : (
+        <img
+          src={imgSrc}
+          alt={title}
+          loading="lazy"
+          onError={handleError}
+          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+        />
+      )}
 
-        {/* Bottom Info inside poster */}
-        <div className="absolute bottom-2 inset-x-2 pointer-events-none flex items-center justify-between gap-1">
-          {item.chapterCount ? (
-            <span className="text-[10px] font-medium text-gray-300 bg-black/70 px-1.5 py-0.5 rounded backdrop-blur border border-white/5">
-              {item.chapterCount} Ch
-            </span>
-          ) : <span />}
-          {item.updatedAt ? (
-            <span className="text-[9px] font-semibold text-gray-200 bg-black/85 px-1.5 py-0.5 rounded backdrop-blur border border-white/10 flex items-center gap-1">
-              <Clock className="w-2.5 h-2.5 text-gray-400" />
-              {formatTimeAgo(item.updatedAt)}
-            </span>
-          ) : null}
-        </div>
-      </div>
-
-      {/* Title & Type below poster */}
-      <div className="pt-2 px-0.5">
-        <h3 className="font-bold text-xs sm:text-sm text-gray-100 group-hover:text-brand-400 transition-colors line-clamp-2 leading-snug">
+      {/* Default Bottom Gradient & Info (Hidden on desktop hover when action overlay is active) */}
+      <div className="absolute inset-x-0 bottom-0 p-2.5 sm:p-3 bg-gradient-to-t from-black/95 via-black/55 to-transparent transition-opacity group-hover:opacity-0 pointer-events-none">
+        <div className="text-xs sm:text-[13px] font-bold text-white line-clamp-1 drop-shadow">
           {title}
-        </h3>
-        <p className="text-[11px] text-gray-400 mt-0.5 truncate flex items-center gap-1.5">
-          <span>{isNovel ? 'Light Novel' : (item.type || 'Manga')}</span>
-          {item.status ? (
+        </div>
+        <div className="flex items-center gap-1.5 mt-1 text-[10px] text-gray-400">
+          <span className="font-semibold text-emerald-400">{isNovel ? 'Novel' : (item.type || 'Manga')}</span>
+          {rating ? (
             <>
-              <span className="text-gray-600">•</span>
-              <span className="text-gray-400">{item.status}</span>
+              <span>•</span>
+              <span className="flex items-center gap-0.5 text-amber-400 font-bold">
+                <Star className="w-2.5 h-2.5 fill-amber-400" />
+                {rating}
+              </span>
             </>
           ) : null}
-        </p>
+        </div>
+
+        {/* Progress line if in history */}
+        {progress && progress.progressPercent ? (
+          <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-white/20">
+            <div className="h-full bg-emerald-500" style={{ width: `${Math.max(5, progress.progressPercent)}%` }} />
+          </div>
+        ) : null}
+      </div>
+
+      {/* Flowflix Hover Action Overlay (Desktop Only) */}
+      <div className="hidden sm:flex absolute inset-0 bg-gradient-to-t from-black/95 via-black/80 to-black/35 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex-col justify-end p-3 gap-1.5 z-20 pointer-events-none">
+        <div className="text-xs sm:text-[13px] font-bold text-white line-clamp-1 drop-shadow">
+          {title}
+        </div>
+
+        {/* Action Buttons Row */}
+        <div className="flex items-center gap-1.5 pt-0.5 pointer-events-auto">
+          {/* Circular Green Play / Read Button */}
+          <button
+            onClick={handlePlayClick}
+            className="size-8 rounded-full bg-emerald-500 hover:bg-emerald-400 text-white grid place-items-center shadow-lg active:scale-95 transition cursor-pointer"
+            title="Read Chapter"
+            aria-label="Read Chapter"
+          >
+            <Play className="size-4 fill-white translate-x-px" />
+          </button>
+
+          {/* Circular Add to Library Button */}
+          <button
+            onClick={handleBookmarkClick}
+            className={`size-8 rounded-full border grid place-items-center active:scale-95 transition cursor-pointer ${
+              bookmarked
+                ? 'border-emerald-500/60 bg-emerald-500/20 text-emerald-400'
+                : 'border-white/35 bg-black/60 hover:border-white hover:bg-black/80 text-white'
+            }`}
+            title={bookmarked ? 'Remove from Library' : 'Add to Library'}
+            aria-label={bookmarked ? 'Remove from Library' : 'Add to Library'}
+          >
+            {bookmarked ? <Check className="size-4 text-emerald-400" /> : <Plus className="size-4" />}
+          </button>
+
+          {/* Circular Info Button */}
+          <button
+            onClick={handleCardClick}
+            className="size-8 ml-auto rounded-full border border-white/35 bg-black/60 hover:border-white hover:bg-black/80 text-white grid place-items-center active:scale-95 transition cursor-pointer"
+            title="View Details"
+            aria-label="View Details"
+          >
+            <ChevronDown className="size-4" />
+          </button>
+        </div>
+
+        {/* Metadata subline */}
+        <div className="flex items-center gap-1.5 text-[10px] text-white/80 pt-0.5 font-medium">
+          <span className="text-emerald-400 font-bold">{isNovel ? 'Light Novel' : 'Manga'}</span>
+          {rating ? (
+            <>
+              <span>•</span>
+              <span className="text-amber-400 font-bold">{rating} ★</span>
+            </>
+          ) : null}
+          {item.chapterCount ? (
+            <>
+              <span>•</span>
+              <span>{item.chapterCount} Chs</span>
+            </>
+          ) : null}
+        </div>
       </div>
     </div>
   );

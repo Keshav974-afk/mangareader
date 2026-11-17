@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Search, Bookmark, Compass, Flame, BookText, Library, Download, Sparkles } from 'lucide-react';
+import { Search, Compass, Sparkles, Flame, BookText, Bookmark, Shuffle, Download } from 'lucide-react';
+import { api } from '../services/api';
+import { Logo } from './Logo';
 
 interface NavbarProps {
   activeTab: string;
@@ -12,9 +14,18 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   onNavigate,
   onOpenSearch,
-  bookmarkCount
+  bookmarkCount,
 }) => {
+  const [scrolled, setScrolled] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [isSurpriseLoading, setIsSurpriseLoading] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 20);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   useEffect(() => {
     const handler = (e: any) => {
@@ -34,153 +45,128 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
-  const desktopNavItems = [
-    { id: 'home', label: 'Discover', icon: Compass, route: '#/' },
-    { id: 'latest', label: 'Latest Chapters', icon: Sparkles, route: '#/latest' },
-    { id: 'comics', label: 'Manga & Manhwa', icon: Flame, route: '#/browse/comics' },
-    { id: 'novels', label: 'Light Novels', icon: BookText, route: '#/browse/novels' },
-    { id: 'library', label: 'Library', icon: Library, route: '#/library', badge: bookmarkCount }
-  ];
+  const handleSurpriseMe = async () => {
+    if (isSurpriseLoading) return;
+    setIsSurpriseLoading(true);
+    try {
+      const res = await api.getPopular({ timeframe: 'daily', limit: 20 });
+      if (res && res.items && res.items.length > 0) {
+        const randomIndex = Math.floor(Math.random() * res.items.length);
+        const randomItem = res.items[randomIndex];
+        onNavigate(`#/manga/${randomItem.id}`);
+      }
+    } catch {
+      // fallback
+    } finally {
+      setIsSurpriseLoading(false);
+    }
+  };
 
-  const mobileNavItems = [
+  const navItems = [
     { id: 'home', label: 'Home', icon: Compass, route: '#/' },
     { id: 'latest', label: 'Latest', icon: Sparkles, route: '#/latest' },
-    { id: 'comics', label: 'Manga', icon: Flame, route: '#/browse/comics' },
-    { id: 'search', label: 'Search', icon: Search, action: onOpenSearch },
-    { id: 'library', label: 'Library', icon: Bookmark, route: '#/library', badge: bookmarkCount }
+    { id: 'comics', label: 'Manga & Manhwa', icon: Flame, route: '#/browse/comics' },
+    { id: 'novels', label: 'Light Novels', icon: BookText, route: '#/browse/novels' },
+    { id: 'library', label: 'My Library', icon: Bookmark, route: '#/library', badge: bookmarkCount },
   ];
 
   return (
-    <>
-      {/* Top Header (Sticky) */}
-      <header className="sticky top-0 z-40 glass-nav transition-all duration-200">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-3">
-          
-          {/* Logo: Voidflix Manga */}
-          <button 
-            onClick={() => onNavigate('#/')}
-            className="flex items-center gap-2 sm:gap-2.5 text-left group shrink-0 active:scale-95 transition-transform"
-          >
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-red-600 via-rose-600 to-red-700 flex items-center justify-center text-white border border-white/10 group-hover:scale-105 transition-transform">
-              <span className="font-black text-sm sm:text-base tracking-tighter">V</span>
-            </div>
-            <div>
-              <span className="font-black tracking-tight text-base sm:text-lg text-white transition-colors flex items-center gap-1.5">
-                VOID<span className="text-red-500">FLIX</span>
-                <span className="text-gray-300 text-[10px] sm:text-xs px-1.5 py-0.5 rounded bg-white/5 border border-white/10 font-bold uppercase tracking-wider">
-                  MANGA
-                </span>
-              </span>
-            </div>
-          </button>
+    <header
+      className={`fixed top-0 inset-x-0 z-40 transition-all duration-300 ${
+        scrolled
+          ? 'glass-strong border-x-0 border-t-0'
+          : 'bg-gradient-to-b from-black/90 via-black/40 to-transparent'
+      }`}
+    >
+      <div className="flex items-center gap-3 sm:gap-6 px-4 sm:px-8 h-16 sm:h-18 max-w-[1920px] mx-auto">
+        {/* Brand Logo matching Flowflix with Emerald Theme */}
+        <button
+          onClick={() => onNavigate('#/')}
+          className="text-left shrink-0 active:scale-95 transition-transform cursor-pointer"
+          aria-label="Voidflix Manga Home"
+        >
+          <Logo size="md" />
+        </button>
 
-          {/* Desktop Navigation Links */}
-          <nav className="hidden md:flex items-center gap-1 bg-white/[0.04] p-1 rounded-xl border border-white/[0.06]">
-            {desktopNavItems.map(item => {
-              const Icon = item.icon;
-              const isActive = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => onNavigate(item.route)}
-                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    isActive 
-                      ? 'bg-brand-500 text-white font-bold' 
-                      : 'text-gray-400 hover:text-white hover:bg-white/5'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span>{item.label}</span>
-                  {item.badge ? (
-                    <span className="ml-1 text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-white/20 text-white">
-                      {item.badge}
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </nav>
-
-          {/* Search Trigger & PWA Install */}
-          <div className="flex items-center gap-2">
-            {installPrompt && (
-              <button
-                onClick={handleInstallClick}
-                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-200 text-xs font-bold transition-all active:scale-95"
-                title="Install Voidflix Manga App (PWA)"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Install App</span>
-              </button>
-            )}
-
-            <button
-              onClick={onOpenSearch}
-              className="flex items-center gap-2 sm:gap-3 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-white/[0.06] hover:bg-white/10 border border-white/10 text-gray-300 text-xs font-medium transition-all group active:scale-95"
-              title="Search titles, authors, or genres (Ctrl + K)"
-            >
-              <Search className="w-4 h-4 text-brand-400 group-hover:scale-110 transition-transform" />
-              <span className="hidden sm:inline">Search manga & novels...</span>
-              <span className="sm:hidden text-xs text-gray-400 font-medium">Search</span>
-              <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-bold font-mono text-gray-400 bg-white/10 rounded border border-white/15">
-                ⌘K
-              </kbd>
-            </button>
-          </div>
-
-        </div>
-      </header>
-
-      {/* Mobile Fixed Bottom Navigation Bar */}
-      <nav 
-        className="md:hidden fixed bottom-0 inset-x-0 z-50 glass-nav border-t border-white/10 bg-carbon-950/95 backdrop-blur-xl px-2 py-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] transition-all"
-        aria-label="Mobile Navigation"
-      >
-        <div className="flex items-center justify-around max-w-md mx-auto">
-          {mobileNavItems.map(item => {
-            const Icon = item.icon;
-            const isActive = item.id !== 'search' && activeTab === item.id;
+        {/* Desktop Navigation Links with Flowflix-style rounded active pill */}
+        <nav className="hidden lg:flex items-center gap-1 xl:gap-2 text-sm ml-2">
+          {navItems.map((item) => {
+            const isActive = activeTab === item.id;
             return (
               <button
                 key={item.id}
-                onClick={() => {
-                  if (item.action) {
-                    item.action();
-                  } else if (item.route) {
-                    onNavigate(item.route);
-                  }
-                }}
-                className={`relative flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all active:scale-90 ${
-                  isActive 
-                    ? 'text-brand-400' 
-                    : 'text-gray-400 hover:text-gray-200'
+                onClick={() => onNavigate(item.route)}
+                className={`px-3.5 py-1.5 rounded-full transition-all text-[13px] xl:text-[14px] flex items-center gap-1.5 cursor-pointer ${
+                  isActive
+                    ? 'bg-black/75 text-emerald-400 font-bold border border-white/10 shadow-md backdrop-blur-sm ring-1 ring-emerald-500/30'
+                    : 'text-white/70 hover:text-white hover:bg-white/5 font-medium'
                 }`}
               >
-                {/* Active pill indicator */}
-                {isActive && (
-                  <span className="absolute -top-1 w-8 h-1 rounded-full bg-brand-500" />
-                )}
-
-                <div className="relative">
-                  <Icon className={`w-5 h-5 transition-transform ${isActive ? 'scale-110 stroke-[2.4]' : 'stroke-[1.8]'}`} />
-                  {/* Badge */}
-                  {item.badge ? (
-                    <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-brand-500 text-[10px] font-extrabold text-white flex items-center justify-center shadow-sm">
-                      {item.badge > 99 ? '99+' : item.badge}
-                    </span>
-                  ) : null}
-                </div>
-
-                <span className={`text-[10px] tracking-tight mt-1 transition-all ${
-                  isActive ? 'font-extrabold text-white' : 'font-medium'
-                }`}>
-                  {item.label}
-                </span>
+                <span>{item.label}</span>
+                {item.badge ? (
+                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-500/30 text-emerald-300">
+                    {item.badge}
+                  </span>
+                ) : null}
               </button>
             );
           })}
+        </nav>
+
+        {/* Right Action Icons: Search Capsule + Surprise Me + Install App */}
+        <div className="ml-auto flex items-center gap-2 sm:gap-3">
+          {/* Flowflix Desktop Search Capsule */}
+          <div
+            onClick={onOpenSearch}
+            className="flex items-center rounded-full border border-white/20 bg-black/50 px-3.5 py-1.5 text-sm text-white hover:border-emerald-500/60 transition-all duration-300 w-36 sm:w-52 lg:w-64 shadow-inner cursor-pointer group"
+          >
+            <Search className="size-4 text-emerald-400 mr-2 shrink-0 group-hover:scale-110 transition-transform" />
+            <span className="text-xs sm:text-[13px] text-white/60 group-hover:text-white/80 transition-colors truncate">
+              Titles, authors, genres...
+            </span>
+            <kbd className="hidden lg:inline-block ml-auto px-1.5 py-0.5 text-[10px] font-bold font-mono text-gray-400 bg-white/10 rounded border border-white/10">
+              ⌘K
+            </kbd>
+          </div>
+
+          {/* Surprise Me / Random Manga Button */}
+          <button
+            onClick={handleSurpriseMe}
+            disabled={isSurpriseLoading}
+            className="size-9 sm:size-10 grid place-items-center rounded-full border border-white/15 bg-black/40 hover:bg-white/10 text-emerald-400 hover:text-emerald-300 transition active:scale-95 cursor-pointer shadow-sm"
+            title="Surprise Me (Random Title)"
+            aria-label="Surprise Me"
+          >
+            <Shuffle className={`size-4 ${isSurpriseLoading ? 'animate-spin' : ''}`} />
+          </button>
+
+          {/* PWA Install Button */}
+          {installPrompt && (
+            <button
+              onClick={handleInstallClick}
+              className="hidden sm:flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 text-xs font-bold transition active:scale-95 cursor-pointer"
+              title="Install Voidflix Manga App (PWA)"
+            >
+              <Download className="size-3.5" />
+              <span>Install App</span>
+            </button>
+          )}
+
+          {/* Library Link on mobile / tablet */}
+          <button
+            onClick={() => onNavigate('#/library')}
+            className="lg:hidden size-9 grid place-items-center rounded-full border border-white/15 bg-black/40 text-white/80 hover:text-white transition cursor-pointer relative"
+            title="Library"
+          >
+            <Bookmark className="size-4" />
+            {bookmarkCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-emerald-500 text-[10px] font-black text-white flex items-center justify-center">
+                {bookmarkCount > 99 ? '99+' : bookmarkCount}
+              </span>
+            )}
+          </button>
         </div>
-      </nav>
-    </>
+      </div>
+    </header>
   );
 };

@@ -112,14 +112,14 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({ category, onNavigate }) 
   });
 
   return (
-    <div className="pb-16 space-y-6">
+    <div className="pb-16 space-y-6 px-3 sm:px-6 md:px-8">
       
       {/* Header & Filter Controls */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-2 border-b border-white/10">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-4 border-b border-white/10">
         <div>
           {category === 'latest' && (
-            <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-gray-200 text-[11px] font-bold uppercase tracking-wider w-fit mb-2">
-              <Sparkles className="w-3.5 h-3.5 text-brand-400" />
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-bold uppercase tracking-wider w-fit mb-2">
+              <Sparkles className="w-3.5 h-3.5" />
               <span>Real-Time Chapter Updates</span>
             </div>
           )}
@@ -134,25 +134,25 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({ category, onNavigate }) 
         {/* Medium Filter Pills & Quick Filter */}
         <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
           {/* Search Box */}
-          <div className="relative flex-1 sm:w-48">
-            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <div className="relative flex-1 sm:w-52">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Filter list..."
               value={query}
               onChange={e => setQuery(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-gray-500 outline-none focus:border-brand-500"
+              className="w-full bg-[#181818] border border-white/10 rounded-full pl-9 pr-4 py-2 text-xs text-white placeholder-gray-500 outline-none focus:border-emerald-500 transition-colors shadow-inner"
             />
           </div>
 
-          {/* Medium Pills */}
-          <div className="flex bg-white/5 p-1 rounded-xl border border-white/10 text-xs font-semibold">
+          {/* Medium Pills (Flowflix Pill Switcher) */}
+          <div className="flex bg-[#181818] p-1 rounded-full border border-white/10 text-xs font-semibold shadow-inner">
             {(['all', 'Comic', 'Novel'] as const).map(m => (
               <button
                 key={m}
                 onClick={() => setFilterMedium(m)}
-                className={`px-3 py-1.5 rounded-lg transition ${
-                  filterMedium === m ? 'bg-brand-500 text-white font-bold shadow-sm' : 'text-gray-400 hover:text-white'
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                  filterMedium === m ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25' : 'text-gray-400 hover:text-white hover:bg-white/5'
                 }`}
               >
                 {m === 'all' ? 'All' : m === 'Comic' ? 'Comics' : 'Novels'}
@@ -197,7 +197,7 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({ category, onNavigate }) 
               <button
                 onClick={() => fetchBatch(offset, false)}
                 disabled={isLoadingMore}
-                className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-brand-600 to-emerald-600 hover:from-brand-500 hover:to-emerald-500 text-white font-extrabold text-sm border border-white/10 flex items-center gap-2.5 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                className="px-8 py-3.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-sm shadow-lg shadow-emerald-500/25 flex items-center gap-2.5 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 cursor-pointer"
               >
                 {isLoadingMore ? (
                   <>
@@ -211,7 +211,7 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({ category, onNavigate }) 
                   </>
                 )}
               </button>
-              <span className="text-[11px] font-medium text-gray-500">
+              <span className="text-[11px] font-medium text-gray-500 tabular-nums">
                 Loaded {items.length} titles
               </span>
             </div>

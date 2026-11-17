@@ -144,38 +144,38 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         isBookmarked={isBookmarked}
       />
 
-      {/* 2. Continue Reading Section (if user has active history) */}
+      {/* 2. Continue Reading Section (Flowflix Continue Watching Row) */}
       {historyList.length > 0 && (
-        <section className="mb-8 px-1 sm:px-2">
+        <section className="mb-6 px-3 sm:px-6 md:px-8">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="font-extrabold text-sm sm:text-lg text-white tracking-tight flex items-center gap-2">
-              <Play className="w-4 h-4 text-brand-400 fill-brand-400" />
+            <h2 className="font-extrabold text-base sm:text-xl text-white tracking-tight flex items-center gap-2">
+              <Play className="w-4 h-4 text-emerald-400 fill-emerald-400" />
               <span>Continue Reading</span>
             </h2>
             <button
               onClick={() => onNavigate('#/library')}
-              className="text-[11px] sm:text-xs font-semibold text-brand-400 hover:text-brand-300 transition-colors"
+              className="text-xs sm:text-sm font-semibold text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
             >
               View All ({historyList.length}) ›
             </button>
           </div>
 
-          <div className="flex gap-2.5 sm:gap-4 overflow-x-auto pb-3 pt-1 px-1 no-scrollbar scroll-smooth touch-pan-x snap-x snap-proximity">
+          <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-3 pt-1 px-1 no-scrollbar scroll-smooth touch-pan-x snap-x snap-proximity">
             {historyList.slice(0, 8).map(item => (
               <div
                 key={item.mangaId}
                 onClick={() => onNavigate(`#/read/${item.mangaId}/${item.chapterId}`)}
-                className="w-52 sm:w-64 rounded-xl bg-carbon-850 border border-white/10 hover:border-brand-500/40 p-2.5 sm:p-3 shrink-0 cursor-pointer transition-all hover:-translate-y-1 group relative shadow-md snap-start active:scale-95"
+                className="w-56 sm:w-64 rounded-xl sm:rounded-2xl bg-[#181818] border border-white/10 hover:border-emerald-500/40 p-3 shrink-0 cursor-pointer transition-all hover:scale-102 group relative shadow-lg snap-start active:scale-95"
               >
-                <div className="flex items-center gap-2.5 sm:gap-3">
-                  <div className="w-11 h-14 sm:w-12 sm:h-16 rounded-lg bg-carbon-800 overflow-hidden shrink-0">
-                    <img src={item.cover} alt={item.mangaTitle} className="w-full h-full object-cover" />
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-16 rounded-xl bg-carbon-800 overflow-hidden shrink-0 border border-white/10">
+                    <img src={item.cover} alt={item.mangaTitle} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-brand-500/20 text-brand-400">
+                    <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                       {item.medium}
                     </span>
-                    <h4 className="font-bold text-xs text-white truncate mt-1 group-hover:text-brand-400 transition-colors">
+                    <h4 className="font-bold text-xs sm:text-sm text-white truncate mt-1 group-hover:text-emerald-400 transition-colors">
                       {item.mangaTitle}
                     </h4>
                     <p className="text-[11px] text-gray-400 truncate mt-0.5">
@@ -187,17 +187,17 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                       e.stopPropagation();
                       removeHistory(item.mangaId);
                     }}
-                    className="p-1.5 text-gray-500 hover:text-red-400 rounded-lg hover:bg-white/5 transition"
+                    className="p-1.5 text-gray-500 hover:text-red-400 rounded-full hover:bg-white/5 transition cursor-pointer"
                     title="Remove from history"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
-                {/* Progress bar */}
-                <div className="w-full h-1 bg-white/10 rounded-full mt-2.5 overflow-hidden">
+                {/* Flowflix Emerald Progress Bar */}
+                <div className="w-full h-1 bg-white/15 rounded-full mt-3 overflow-hidden">
                   <div
-                    className="h-full bg-brand-500 rounded-full transition-all"
+                    className="h-full bg-emerald-500 rounded-full transition-all"
                     style={{ width: `${Math.max(5, item.progressPercent || 0)}%` }}
                   />
                 </div>
@@ -292,30 +292,30 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
       />
 
       {/* 10. Endless Explore Grid with Sort Tabs & Load More */}
-      <section className="mt-12 sm:mt-16 pt-8 border-t border-white/10">
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-6 px-1">
+      <section className="mt-12 sm:mt-16 pt-8 border-t border-white/10 px-3 sm:px-6 md:px-8">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-6">
           <div>
-            <div className="flex items-center gap-2 text-brand-400 text-xs font-bold uppercase tracking-wider mb-1">
+            <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold uppercase tracking-wider mb-1">
               <Layers className="w-4 h-4" />
               <span>Archive Discovery</span>
             </div>
-            <h2 className="text-lg sm:text-2xl font-black text-white tracking-tight">
+            <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
               Explore All Titles
             </h2>
-            <p className="text-xs text-gray-400 mt-0.5">
+            <p className="text-xs sm:text-sm text-gray-400 mt-0.5">
               Browse manga, manhwa & light novels sorted by latest updates or popularity
             </p>
           </div>
 
-          {/* Controls: Sort Tabs + Medium Filter Pills */}
-          <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto">
+          {/* Controls: Sort Tabs + Medium Filter Pills (Flowflix Pill Capsules) */}
+          <div className="flex flex-wrap items-center gap-2.5 self-start lg:self-auto">
             {/* Sort Switcher Tabs */}
-            <div className="flex items-center gap-1 bg-carbon-850 p-1 rounded-xl border border-white/10">
+            <div className="flex items-center gap-1 bg-[#181818] p-1 rounded-full border border-white/10 shadow-inner">
               <button
                 onClick={() => setExploreSort('latest')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
                   exploreSort === 'latest'
-                    ? 'bg-brand-500 text-white'
+                    ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25'
                     : 'text-gray-400 hover:text-white hover:bg-white/5'
                 }`}
               >
@@ -324,9 +324,9 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               </button>
               <button
                 onClick={() => setExploreSort('hot')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
                   exploreSort === 'hot'
-                    ? 'bg-brand-500 text-white'
+                    ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25'
                     : 'text-gray-400 hover:text-white hover:bg-white/5'
                 }`}
               >
@@ -335,9 +335,9 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               </button>
               <button
                 onClick={() => setExploreSort('popular')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
                   exploreSort === 'popular'
-                    ? 'bg-brand-500 text-white'
+                    ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25'
                     : 'text-gray-400 hover:text-white hover:bg-white/5'
                 }`}
               >
@@ -347,14 +347,14 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             </div>
 
             {/* Medium Filter Pills */}
-            <div className="flex items-center gap-1 bg-carbon-850 p-1 rounded-xl border border-white/10">
+            <div className="flex items-center gap-1 bg-[#181818] p-1 rounded-full border border-white/10 shadow-inner">
               {(['All', 'Comic', 'Novel'] as const).map(m => (
                 <button
                   key={m}
                   onClick={() => setExploreMedium(m)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
                     exploreMedium === m
-                      ? 'bg-white/15 text-white shadow-sm'
+                      ? 'bg-white/20 text-white shadow-sm'
                       : 'text-gray-400 hover:text-white hover:bg-white/5'
                   }`}
                 >
@@ -389,12 +389,12 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         </div>
 
         {/* Load More Button & Status */}
-        <div className="mt-8 sm:mt-10 flex flex-col items-center justify-center gap-2">
+        <div className="mt-8 sm:mt-12 flex flex-col items-center justify-center gap-2">
           {hasMore ? (
             <button
               onClick={() => fetchExploreBatch(exploreOffset, false)}
               disabled={isLoadingMore}
-              className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-brand-600 to-emerald-600 hover:from-brand-500 hover:to-emerald-500 text-white font-extrabold text-sm border border-white/10 flex items-center gap-2.5 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed group"
+              className="px-8 py-3.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-sm shadow-lg shadow-emerald-500/25 flex items-center gap-2.5 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed group cursor-pointer"
             >
               {isLoadingMore ? (
                 <>
